@@ -1,0 +1,152 @@
+# Runtime-only Compose: assumes the application image has already been
+# built locally as ${IMAGE} (default: celery-crawl-hub:latest).
+#
+# Build the image first:
+#   make build
+# or manually:
+#   docker build -f deploy/docker/BaseDockerfile -t celery-crawl-hub:base .
+#   docker build -f deploy/docker/Dockerfile     -t celery-crawl-hub:latest .
+#
+# Then start the stack from the project root:
+#   docker compose -f deploy/docker/docker-compose.yml up -d
+#
+# Compose loads `.env` automatically from the project root.
+
+x-app-env: &app-env
+  env_file:
+    - ../../.env
+  environment:
+    POSTGRES_HOST: postgres
+    POSTGRES_HOST_ANOTHER: postgres
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    PROD_REDIS_HOST: redis
+    TEST_REDIS_HOST: redis
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crawler_studio}
+      POSTGRES_USER: ${POSTGRES_USERNAME:-crawler}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../../sql/crawler_tasks.sql:/docker-entrypoint-initdb.d/01-crawler-tasks.sql:ro
+      - ../../sql/ex_crawl_log.sql:/docker-entrypoint-initdb.d/02-ex-crawl-log.sql:ro
+      - ../../sql/ex_shipping_information.sql:/docker-entrypoint-initdb.d/03-ex-shipping-information.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USERNAME:-crawler} -d ${POSTGRES_DB:-crawler_studio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  crawler-api:
+    image: ${IMAGE:-celery-crawl-hub:latest}
+    pull_policy: never
+    <<: *app-env
+    command: ["python", "main.py"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  crawler-celery-worker:
+    image: ${IMAGE:-celery-crawl-hub:latest}
+    pull_policy: never
+    <<: *app-env
+    command:
+      - celery
+      - -A
+      - src.main.tasks.celery_app:celery_app
+      - worker
+      - -n
+      - crawler_worker@%h
+      - -Q
+      - celery
+      - -l
+      - info
+      - --pool=prefork
+      - --concurrency=${CRAWLER_WORKER_CONCURRENCY:-4}
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=50
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  translate-schedule-worker:
+    image: ${IMAGE:-celery-crawl-hub:latest}
+    pull_policy: never
+    <<: *app-env
+    command:
+      - celery
+      - -A
+      - src.main.tasks.celery_app:celery_app
+      - worker
+      - -n
+      - translate_schedule@%h
+      - -Q
+      - translate_schedule
+      - -l
+      - info
+      - --pool=prefork
+      - --concurrency=${TRANSLATE_WORKER_CONCURRENCY:-2}
+      - --prefetch-multiplier=1
+      - --max-tasks-per-child=50
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  crawler-celery-beat:
+    image: ${IMAGE:-celery-crawl-hub:latest}
+    pull_policy: never
+    <<: *app-env
+    command: ["celery", "-A", "src.main.tasks.celery_app:celery_app", "beat", "-l", "info"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gradio-console:
+    image: ${IMAGE:-celery-crawl-hub:latest}
+    pull_policy: never
+    env_file:
+      - ../../.env
+    environment:
+      # 让 Gradio 容器调用同一 compose 网络中的 API 服务
+      GRADIO_API_BASE_URL: http://crawler-api:8000/api
+      GRADIO_SERVER_HOST: 0.0.0.0
+      GRADIO_SERVER_PORT: "7860"
+    command: ["python", "gradio_app.py"]
+    ports:
+      - "7860:7860"
+    depends_on:
+      - crawler-api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

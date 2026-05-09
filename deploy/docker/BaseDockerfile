@@ -1,0 +1,38 @@
+FROM python:3.12-slim-bookworm
+
+# 设置作者与描述
+LABEL maintainer="cy.kron@foxmail.com"
+
+# 设置环境变量，防止 Python 写入 pyc 文件，确保输出实时
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+
+# 使用国内 Debian 镜像，降低 apt 安装耗时
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+        sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources; \
+    fi
+
+# 更新包管理器并安装必要的基础依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    wget \
+    gnupg \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制并安装Python依赖
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple --extra-index-url https://pypi.org/simple --prefer-binary --retries 6 --timeout 120 \
+    && python -m playwright install --with-deps chromium
+
+# Optional pre-built base image. The default Dockerfile is now self-contained;
+# this file is kept only for users who want to cache pip + Playwright layers.
+# Build:
+#   docker build -f deploy/docker/BaseDockerfile -t celery-crawl-hub:base .
