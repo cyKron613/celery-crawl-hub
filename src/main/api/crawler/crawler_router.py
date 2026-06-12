@@ -1,5 +1,7 @@
+import asyncio
 import fastapi
 from fastapi import Body, Depends, Path, Query
+from lxml import etree
 
 from src.main.core.orm.depend.base import get_async_service
 from src.main.repository.crawler_task import CrawlerTaskRepository
@@ -13,6 +15,9 @@ from src.main.schema.crawler_task import (
     CrawlerTaskRunResponseVo,
     CrawlerTaskScheduleActionResponseVo,
     CrawlerTaskUpdateRequest,
+    CrawlerXPathTestRequest,
+    CrawlerXPathTestResponseVo,
+    CrawlerXPathTestResult,
 )
 from src.main.service.crawler.crawler_task_service import CrawlerTaskService
 
@@ -298,3 +303,120 @@ async def list_crawler_inserted_data(
     service: CrawlerTaskService = Depends(get_async_service(CrawlerTaskService, CrawlerTaskRepository)),
 ) -> CrawlerInsertedDataListResponseVo:
     return await service.list_inserted_data(page=page, page_size=page_size)
+
+
+@router.post(
+    path="/test-xpath",
+    summary="测试 XPath 提取网页内容",
+    response_model=CrawlerXPathTestResponseVo,
+)
+async def test_xpath(
+    payload: CrawlerXPathTestRequest = Body(..., description="XPath 测试参数"),
+) -> CrawlerXPathTestResponseVo:
+    url = payload.url.strip()
+    if not url.startswith(("http://", "https://")):
+        return CrawlerXPathTestResponseVo(
+            code=400,
+            message="URL 格式错误，必须以 http:// 或 https:// 开头",
+            data=None
+        )
+
+    xpaths = [payload.xpath] if isinstance(payload.xpath, str) else list(payload.xpath)
+    wait_xpath = None
+    if payload.wait_xpath:
+        wait_xpath = [payload.wait_xpath] if isinstance(payload.wait_xpath, str) else list(payload.wait_xpath)
+
+    from src.main.config.manager import settings
+    engine = settings.CRAWL_ENGINE.lower()
+
+    html = None
+    try:
+        if engine == "playwright":
+            from src.utils.playwright_manager import playwright_fetch
+            res = await playwright_fetch(url, timeout=30, wait_xpath=wait_xpath)
+            if res and res.get("status"):
+                html = res.get("html")
+            else:
+                err = res.get("error") or "Playwright 获取网页失败"
+                return CrawlerXPathTestResponseVo(
+                    code=400,
+                    message=f"Playwright 抓取失败: {err}",
+                    data=None
+                )
+        else:
+            from src.utils.craw_tools import fetch_and_parse
+            res = await asyncio.to_thread(
+                fetch_and_parse, url, False, 2, 1, 30, wait_xpath
+            )
+            if res and res.get("status"):
+                html = res.get("html")
+            else:
+                err = res.get("error") or "DrissionPage 获取网页失败"
+                return CrawlerXPathTestResponseVo(
+                    code=400,
+                    message=f"DrissionPage 抓取失败: {err}",
+                    data=None
+                )
+    except Exception as e:
+        return CrawlerXPathTestResponseVo(
+            code=400,
+            message=f"请求目标网页发生异常: {str(e)}",
+            data=None
+        )
+
+    if not html:
+        return CrawlerXPathTestResponseVo(
+            code=400,
+            message="获取的网页 HTML 源码为空，可能被反爬拦截或超时",
+            data=None
+        )
+
+    try:
+        parsed_html = etree.HTML(html)
+    except Exception as e:
+        return CrawlerXPathTestResponseVo(
+            code=400,
+            message=f"解析 HTML 失败: {str(e)}",
+            data=None
+        )
+
+    extracted = []
+    for xpath in xpaths:
+        if not xpath.strip():
+            continue
+        try:
+            nodes = parsed_html.xpath(xpath)
+            if not nodes:
+                continue
+            for node in nodes:
+                if isinstance(node, str):
+                    cleaned = node.strip()
+                    if cleaned:
+                        extracted.append(cleaned)
+                elif hasattr(node, "xpath"):
+                    txt = "".join(node.xpath(".//text()")).replace("\xa0", " ").strip()
+                    if txt:
+                        extracted.append(txt)
+                else:
+                    cleaned = str(node).strip()
+                    if cleaned:
+                        extracted.append(cleaned)
+        except Exception as e:
+            return CrawlerXPathTestResponseVo(
+                code=400,
+                message=f"XPath 语法错误 '{xpath}': {str(e)}",
+                data=None
+            )
+
+    if not extracted:
+        return CrawlerXPathTestResponseVo(
+            code=400,
+            message="❌ XPath 未提取到任何内容。请检查 XPath 语法规则是否匹配当前网页结构！",
+            data=None
+        )
+
+    return CrawlerXPathTestResponseVo(
+        code=200,
+        message="提取成功",
+        data=CrawlerXPathTestResult(extracted=extracted)
+    )

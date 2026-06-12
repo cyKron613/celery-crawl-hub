@@ -356,6 +356,8 @@ def fetch_and_parse(
     retry_delay: int = 1,
     timeout: float = 300,
     wait_xpath: Optional[Union[str, List[str]]] = None,
+    request_headers: Optional[dict] = None,
+    playwright_headless: bool = True,
 ):
     """
     优化后的爬虫函数，直接调用避免线程池开销
@@ -378,7 +380,16 @@ def fetch_and_parse(
                 # Playwright 异步逻辑在同步 worker 中由于已经存在 event loop 或没有 event loop，
                 # 我们通过 asyncio.run 执行
                 import asyncio
-                result = asyncio.run(playwright_fetch(url, timeout, wait_xpath, need_click))
+                result = asyncio.run(
+                    playwright_fetch(
+                        url,
+                        timeout,
+                        wait_xpath,
+                        need_click,
+                        headless=playwright_headless,
+                        request_headers=request_headers,
+                    )
+                )
                 
                 if result and result.get('status'):
                     html = result.get('html')

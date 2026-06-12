@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Any
 
 from decouple import config
 from pydantic_settings import (
@@ -8,8 +8,6 @@ from pydantic_settings import (
 )
 import pathlib
 import sys
-import os
-from loguru import logger
 
 ROOT_DIR: pathlib.Path = pathlib.Path(
     __file__
@@ -25,24 +23,23 @@ class BackendBaseSettings(BaseSettings):
 
     TITLE: str = "Celery Crawl Hub"
     VERSION: str = "0.0.1"
-    TIMEZONE: str = "+8"
     DESCRIPTION: str | None = None
     DEBUG: bool = True
 
-    BACKEND_SERVER_HOST: str = config("BACKEND_SERVER_HOST", cast=str)  # type: ignore
-    BACKEND_SERVER_PORT: int = config("BACKEND_SERVER_PORT", cast=int)  # type: ignore
-    BACKEND_SERVER_WORKERS: int = config("BACKEND_SERVER_WORKERS", cast=int)  # type: ignore
-    API_PREFIX: str = config("API_PREFIX", cast=str)  # type: ignore
-    DOCS_URL: str = config("DOCS_URL", cast=str)  # type: ignore
-    OPENAPI_URL: str = config("OPENAPI_URL", cast=str)  # type: ignore
-    REDOC_URL: str = config("REDOC_URL", cast=str)  # type: ignore
+    BACKEND_SERVER_HOST: str = config("BACKEND_SERVER_HOST", cast=str, default="0.0.0.0")  # type: ignore
+    BACKEND_SERVER_PORT: int = config("BACKEND_SERVER_PORT", cast=int, default=8000)  # type: ignore
+    BACKEND_SERVER_WORKERS: int = config("BACKEND_SERVER_WORKERS", cast=int, default=1)  # type: ignore
+    API_PREFIX: str = config("API_PREFIX", cast=str, default="/api")  # type: ignore
+    DOCS_URL: str = config("DOCS_URL", cast=str, default="/api-doc.html")  # type: ignore
+    OPENAPI_URL: str = config("OPENAPI_URL", cast=str, default="/api.json")  # type: ignore
+    REDOC_URL: str = config("REDOC_URL", cast=str, default="/api-redoc.html")  # type: ignore
     OPENAPI_PREFIX: str = ""
 
-    DOCS_AUTH_USERNAME: str = config("DOCS_AUTH_USERNAME", cast=str)  # type: ignore
-    DOCS_AUTH_PASSWORD: str = config("DOCS_AUTH_PASSWORD", cast=str)  # type: ignore
+    DOCS_AUTH_USERNAME: str = config("DOCS_AUTH_USERNAME", cast=str, default="admin")  # type: ignore
+    DOCS_AUTH_PASSWORD: str = config("DOCS_AUTH_PASSWORD", cast=str, default="change-me")  # type: ignore
 
-    CELERY_BROKER_URL: str = config("CELERY_BROKER_URL", cast=str)  # type: ignore
-    CELERY_RESULT_BACKEND: str = config("CELERY_RESULT_BACKEND", cast=str)  # type: ignore
+    CELERY_BROKER_URL: str = config("CELERY_BROKER_URL", cast=str, default="redis://localhost:6379/0")  # type: ignore
+    CELERY_RESULT_BACKEND: str = config("CELERY_RESULT_BACKEND", cast=str, default="redis://localhost:6379/8")  # type: ignore
     CELERY_BROKER_POOL_LIMIT: int = config("CELERY_BROKER_POOL_LIMIT", cast=int, default=30)  # type: ignore
     CELERY_BROKER_CONNECTION_TIMEOUT: int = config("CELERY_BROKER_CONNECTION_TIMEOUT", cast=int, default=5)  # type: ignore
     CELERY_TIMEZONE: str = config("CELERY_TIMEZONE", cast=str, default="Asia/Shanghai")  # type: ignore
@@ -59,42 +56,67 @@ class BackendBaseSettings(BaseSettings):
     CRAWL_TABLE_NAME: str = config("CRAWL_TABLE_NAME", cast=str, default="sdc_test.ex_shipping_information")  # type: ignore
     INSERT_INTO_PROD: bool = config("INSERT_INTO_PROD", cast=bool, default=False)  # type: ignore
     INSERT_INTO_SDC: bool = config("INSERT_INTO_SDC", cast=bool, default=False)  # type: ignore
+    CRAWL_ENGINE: str = config("CRAWL_ENGINE", cast=str, default="drissionpage")  # type: ignore
+    SDC_TABLE_NAME: str = config("SDC_TABLE_NAME", cast=str, default="sdc_test.ex_shipping_information")  # type: ignore
+    SDC_POSTGRES_CONNECT: str = config("SDC_POSTGRES_CONNECT", cast=str, default="postgresql+psycopg2")  # type: ignore
+    SDC_POSTGRES_HOST: str = config("SDC_POSTGRES_HOST", cast=str, default="localhost")  # type: ignore
+    SDC_POSTGRES_PORT: int = config("SDC_POSTGRES_PORT", cast=int, default=5432)  # type: ignore
+    SDC_POSTGRES_DB: str = config("SDC_POSTGRES_DB", cast=str, default="")  # type: ignore
+    SDC_POSTGRES_USERNAME: str = config("SDC_POSTGRES_USERNAME", cast=str, default="")  # type: ignore
+    SDC_POSTGRES_SCHEMA: str = config("SDC_POSTGRES_SCHEMA", cast=str, default="sdc_bi")  # type: ignore
+
+    # OceanBase（DATABASE_TYPE=oceanbase 时使用）
+    OCEANBASE_HOST: str = config("OCEANBASE_HOST", cast=str, default="")  # type: ignore
+    OCEANBASE_PORT: int = config("OCEANBASE_PORT", cast=int, default=2883)  # type: ignore
+    OCEANBASE_DB: str = config("OCEANBASE_DB", cast=str, default="")  # type: ignore
+    OCEANBASE_USERNAME: str = config("OCEANBASE_USERNAME", cast=str, default="")  # type: ignore
+    OCEANBASE_PASSWORD: str = config("OCEANBASE_PASSWORD", cast=str, default="")  # type: ignore
+
+    # 生产入库数据库（INSERT_INTO_PROD=true 时使用）
+    PROD_DB_HOST: str = config("PROD_DB_HOST", cast=str, default="")  # type: ignore
+    PROD_DB_PORT: int = config("PROD_DB_PORT", cast=int, default=3306)  # type: ignore
+    PROD_DB_NAME: str = config("PROD_DB_NAME", cast=str, default="")  # type: ignore
+    PROD_DB_USERNAME: str = config("PROD_DB_USERNAME", cast=str, default="")  # type: ignore
+    PROD_DB_PASSWORD: str = config("PROD_DB_PASSWORD", cast=str, default="")  # type: ignore
+
+    # 微信爬虫
+    WECHAT_TOKEN: str = config("WECHAT_TOKEN", cast=str, default="")  # type: ignore
+    WECHAT_COOKIE: str = config("WECHAT_COOKIE", cast=str, default="")  # type: ignore
+
+    # 日志
+    LOG_LEVEL: str = config("LOG_LEVEL", cast=str, default="INFO")  # type: ignore
 
 
-    POSTGRES_CONNECT: str = config("POSTGRES_CONNECT", cast=str)  # type: ignore
-    POSTGRES_HOST: str = config("POSTGRES_HOST", cast=str)  # type: ignore
-    POSTGRES_PORT: int = config("POSTGRES_PORT", cast=int)  # type: ignore
-    POSTGRES_DB: str = config("POSTGRES_DB", cast=str)  # type: ignore
-    POSTGRES_USERNAME: str = config("POSTGRES_USERNAME", cast=str)  # type: ignore
-    POSTGRES_PASSWORD: str = config("POSTGRES_PASSWORD", cast=str)  # type: ignore
+    POSTGRES_CONNECT: str = config("POSTGRES_CONNECT", cast=str, default="postgresql+asyncpg")  # type: ignore
+    POSTGRES_HOST: str = config("POSTGRES_HOST", cast=str, default="localhost")  # type: ignore
+    POSTGRES_PORT: int = config("POSTGRES_PORT", cast=int, default=5432)  # type: ignore
+    POSTGRES_DB: str = config("POSTGRES_DB", cast=str, default="crawler_studio")  # type: ignore
+    POSTGRES_USERNAME: str = config("POSTGRES_USERNAME", cast=str, default="crawler")  # type: ignore
+    POSTGRES_PASSWORD: str = config("POSTGRES_PASSWORD", cast=str, default="change-me")  # type: ignore
     # POSTGRES_SCHEMA: str = config("POSTGRES_SCHEMA", cast=str)  # type: ignore
 
     # --------------------------------
     #   Production Postgres Config (Another)
     # --------------------------------
-    POSTGRES_CONNECT_ANOTHER: str = config("POSTGRES_CONNECT_ANOTHER", cast=str)  # type: ignore
-    POSTGRES_HOST_ANOTHER: str = config("POSTGRES_HOST_ANOTHER", cast=str)  # type: ignore
-    POSTGRES_PORT_ANOTHER: int = config("POSTGRES_PORT_ANOTHER", cast=int)  # type: ignore
-    POSTGRES_DB_ANOTHER: str = config("POSTGRES_DB_ANOTHER", cast=str)  # type: ignore
-    POSTGRES_USERNAME_ANOTHER: str = config("POSTGRES_USERNAME_ANOTHER", cast=str)  # type: ignore
-    POSTGRES_PASSWORD_ANOTHER: str = config("POSTGRES_PASSWORD_ANOTHER", cast=str)  # type: ignore
+    POSTGRES_CONNECT_ANOTHER: str = config("POSTGRES_CONNECT_ANOTHER", cast=str, default="postgresql+asyncpg")  # type: ignore
+    POSTGRES_HOST_ANOTHER: str = config("POSTGRES_HOST_ANOTHER", cast=str, default="localhost")  # type: ignore
+    POSTGRES_PORT_ANOTHER: int = config("POSTGRES_PORT_ANOTHER", cast=int, default=5432)  # type: ignore
+    POSTGRES_DB_ANOTHER: str = config("POSTGRES_DB_ANOTHER", cast=str, default="crawler_studio")  # type: ignore
+    POSTGRES_USERNAME_ANOTHER: str = config("POSTGRES_USERNAME_ANOTHER", cast=str, default="crawler")  # type: ignore
+    POSTGRES_PASSWORD_ANOTHER: str = config("POSTGRES_PASSWORD_ANOTHER", cast=str, default="change-me")  # type: ignore
     # POSTGRES_SCHEMA_ANOTHER: str = config("POSTGRES_SCHEMA_ANOTHER", cast=str)  # type: ignore
 
     
-    DB_MAX_POOL_CON: int = config("DB_MAX_POOL_CON", cast=int)  # type: ignore
-    DB_POOL_SIZE: int = config("DB_POOL_SIZE", cast=int)  # type: ignore
-    DB_POOL_OVERFLOW: int = config("DB_POOL_OVERFLOW", cast=int)  # type: ignore
-    DB_TIMEOUT: int = config("DB_TIMEOUT", cast=int)  # type: ignore
-    DB_POOL_RECYCLE: int = config("DB_POOL_RECYCLE", cast=int)  # type: ignore
-    DB_POOL_TIMEOUT: int = config("DB_POOL_TIMEOUT", cast=int)  # type: ignore
-    DB_POOL_RESET_ON_RETURN: str = config("DB_POOL_RESET_ON_RETURN", cast=str)  # type: ignore
-    DB_RETRY_ATTEMPTS: int = config("DB_RETRY_ATTEMPTS", cast=int)  # type: ignore
-    DB_RETRY_DELAY: float = config("DB_RETRY_DELAY", cast=float)  # type: ignore
-    DB_RETRY_BACKOFF: float = config("DB_RETRY_BACKOFF", cast=float)  # type: ignore
+    DB_POOL_SIZE: int = config("DB_POOL_SIZE", cast=int, default=5)  # type: ignore
+    DB_POOL_OVERFLOW: int = config("DB_POOL_OVERFLOW", cast=int, default=10)  # type: ignore
+    DB_POOL_RECYCLE: int = config("DB_POOL_RECYCLE", cast=int, default=1800)  # type: ignore
+    DB_POOL_TIMEOUT: int = config("DB_POOL_TIMEOUT", cast=int, default=30)  # type: ignore
+    DB_POOL_RESET_ON_RETURN: str = config("DB_POOL_RESET_ON_RETURN", cast=str, default="rollback")  # type: ignore
+    DB_RETRY_ATTEMPTS: int = config("DB_RETRY_ATTEMPTS", cast=int, default=3)  # type: ignore
+    DB_RETRY_DELAY: float = config("DB_RETRY_DELAY", cast=float, default=0.5)  # type: ignore
+    DB_RETRY_BACKOFF: float = config("DB_RETRY_BACKOFF", cast=float, default=2.0)  # type: ignore
 
-    IS_DB_ECHO_LOG: bool = config("IS_DB_ECHO_LOG", cast=bool)  # type: ignore
-    IS_DB_FORCE_ROLLBACK: bool = config("IS_DB_FORCE_ROLLBACK", cast=bool)  # type: ignore
-    IS_DB_EXPIRE_ON_COMMIT: bool = config("IS_DB_EXPIRE_ON_COMMIT", cast=bool)  # type: ignore
+    IS_DB_ECHO_LOG: bool = config("IS_DB_ECHO_LOG", cast=bool, default=False)  # type: ignore
 
 
     # 修改REDIS_PORT的处理方式
@@ -105,17 +127,17 @@ class BackendBaseSettings(BaseSettings):
         return int(value)
         
     # redis
-    PROD_REDIS_HOST: str = config("PROD_REDIS_HOST", cast=str)  # type: ignore
-    PROD_REDIS_PORT: int = config("PROD_REDIS_PORT", cast=parse_redis_port)  # type: ignore
-    PROD_REDIS_PASSWORD: str = config("PROD_REDIS_PASSWORD", cast=str)  # type: ignore
-    PROD_REDIS_DB: int = config("PROD_REDIS_DB", cast=int)  # type: ignore
+    PROD_REDIS_HOST: str = config("PROD_REDIS_HOST", cast=str, default="localhost")  # type: ignore
+    PROD_REDIS_PORT: int = config("PROD_REDIS_PORT", cast=parse_redis_port, default=6379)  # type: ignore
+    PROD_REDIS_PASSWORD: str = config("PROD_REDIS_PASSWORD", cast=str, default="")  # type: ignore
+    PROD_REDIS_DB: int = config("PROD_REDIS_DB", cast=int, default=0)  # type: ignore
     PROD_REDIS_CLUSTER: bool = config("PROD_REDIS_CLUSTER", cast=bool, default=False)  # type: ignore
     PROD_REDIS_NODES: str = config("PROD_REDIS_NODES", cast=str, default="")  # type: ignore
 
-    TEST_REDIS_HOST: str = config("TEST_REDIS_HOST", cast=str)  # type: ignore
-    TEST_REDIS_PORT: int = config("TEST_REDIS_PORT", cast=parse_redis_port)  # type: ignore
-    TEST_REDIS_PASSWORD: str = config("TEST_REDIS_PASSWORD", cast=str)  # type: ignore
-    TEST_REDIS_DB: int = config("TEST_REDIS_DB", cast=int)  # type: ignore
+    TEST_REDIS_HOST: str = config("TEST_REDIS_HOST", cast=str, default="localhost")  # type: ignore
+    TEST_REDIS_PORT: int = config("TEST_REDIS_PORT", cast=parse_redis_port, default=6379)  # type: ignore
+    TEST_REDIS_PASSWORD: str = config("TEST_REDIS_PASSWORD", cast=str, default="")  # type: ignore
+    TEST_REDIS_DB: int = config("TEST_REDIS_DB", cast=int, default=0)  # type: ignore
     TEST_REDIS_CLUSTER: bool = config("TEST_REDIS_CLUSTER", cast=bool, default=False)  # type: ignore
 
     # Pydantic v2 `BaseSettings` 会对 `List[str]` 字段做 JSON 解析，与逗号分隔
@@ -133,7 +155,6 @@ class BackendBaseSettings(BaseSettings):
         return [item.strip() for item in self.ALLOWED_ORIGINS_RAW.split(",") if item.strip()]
 
     LOGGING_LEVEL: int = logging.INFO
-    LOGGERS: Tuple[str, str] = ("uvicorn.asgi", "uvicorn.access")
 
 
     model_config = SettingsConfigDict(

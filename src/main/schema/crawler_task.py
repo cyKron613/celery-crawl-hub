@@ -294,3 +294,19 @@ class CrawlerExecutionResultResponseVo(BaseModel):
     code: int = Field(..., description="响应码")
     message: str = Field(..., description="响应消息")
     data: CrawlerExecutionResultData | None = Field(None, description="执行结果")
+
+
+class CrawlerXPathTestRequest(BaseModel):
+    url: str = Field(..., description="目标网页 URL")
+    xpath: str | list[str] = Field(..., description="要测试的 XPath")
+    wait_xpath: str | list[str] | None = Field(None, description="渲染时等待命中的 XPath")
+
+
+class CrawlerXPathTestResult(BaseModel):
+    extracted: list[str] = Field(default_factory=list, description="提取到的文本列表")
+
+
+class CrawlerXPathTestResponseVo(BaseModel):
+    code: int = Field(..., description="响应码")
+    message: str = Field(..., description="响应消息")
+    data: CrawlerXPathTestResult | None = Field(None, description="提取结果")

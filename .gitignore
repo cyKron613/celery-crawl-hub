@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.dev.example
 performance_test*
 /.idea
 target/
@@ -89,6 +90,10 @@ target/
 
 # pyenv
 .python-version
+.claude
+.github
+.specify
+
 .idea/
 # celery beat schedule file
 celerybeat-schedule

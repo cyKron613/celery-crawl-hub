@@ -35,6 +35,28 @@ DEFAULT_TASK_TEMPLATE = {
     "list_retry_sleep_seconds": 3,
     "detail_retry_count": 2,
     "detail_retry_sleep_seconds": 1,
+    "home_request_delay_seconds": 0,
+    "home_request_delay_jitter_seconds": 0,
+    "detail_request_delay_seconds": 0,
+    "detail_request_delay_jitter_seconds": 0,
+    "fetch_timeout": 360,
+    "login_enabled": False,
+    "login_username": "",
+    "login_password": "",
+    "playwright_login_url": "",
+    "playwright_login_entry_xpath": "",
+    "playwright_login_username_xpath": "",
+    "playwright_login_password_xpath": "",
+    "playwright_login_submit_xpath": "",
+    "playwright_login_success_xpath": "",
+    "playwright_login_timeout": 60,
+    "playwright_headless": True,
+    "enable_content_image_placeholder": False,
+    "content_root_xpath": None,
+    "content_image_xpath": ".//img/@src",
+    "content_image_placeholder_template": "![图片{index}]({url})",
+    "append_content_image_mapping": False,
+    "category": "",
     "min_content_length": 0,
     "max_content_length": 0,
     "dedupe_urls": True,
@@ -582,6 +604,90 @@ label {
     max-height: 340px !important;
     overflow-y: auto !important;
 }
+
+/* 2026 refresh: cleaner hierarchy and less visual noise */
+body,
+.gradio-container,
+.gradio-container .main {
+    background:
+        radial-gradient(circle at 8% 0%, #d9ecff 0%, transparent 28%),
+        radial-gradient(circle at 92% 0%, #ffe6cf 0%, transparent 30%),
+        #f5f8fc !important;
+}
+
+.app-shell {
+    margin-bottom: 12px;
+}
+
+.hero-card {
+    border-radius: 14px !important;
+    border: 1px solid #d0dff2 !important;
+    background: linear-gradient(135deg, #f9fcff 0%, #f2f8ff 52%, #fef8f2 100%) !important;
+    box-shadow: 0 8px 26px rgba(15, 23, 42, 0.06) !important;
+}
+
+.section-note {
+    border-radius: 12px !important;
+    border: 1px solid #d7e5f5 !important;
+    background: #fbfdff !important;
+    line-height: 1.55;
+}
+
+.gradio-container .tabs button,
+button[role="tab"] {
+    border-radius: 10px !important;
+    border: 1px solid transparent !important;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    background: #eef4fb !important;
+}
+
+.gradio-container .tabs button.selected,
+button[role="tab"][aria-selected="true"] {
+    border-color: #90b4dd !important;
+    background: #dcecff !important;
+    color: #0b2f5e !important;
+}
+
+.gr-button,
+button {
+    border-radius: 10px !important;
+    transition: all 0.2s ease !important;
+}
+
+.gr-button-primary {
+    background: linear-gradient(135deg, #1d75d8 0%, #165cb2 100%) !important;
+    border-color: #165cb2 !important;
+    color: #ffffff !important;
+}
+
+.gr-button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(22, 92, 178, 0.22) !important;
+}
+
+.gr-group,
+.block,
+.gr-box,
+.gr-form {
+    border-radius: 12px !important;
+}
+
+.gr-accordion {
+    border: 1px solid #d5e2f2 !important;
+    border-radius: 12px !important;
+    background: #fcfdff !important;
+}
+
+.gr-accordion > button,
+.gr-accordion summary {
+    font-weight: 600 !important;
+}
+
+.footer-tip {
+    font-size: 13px;
+    color: #264a77 !important;
+}
 """
 
 
@@ -603,6 +709,28 @@ FORM_FIELD_NAMES = [
     "list_retry_sleep_seconds",
     "detail_retry_count",
     "detail_retry_sleep_seconds",
+    "home_request_delay_seconds",
+    "home_request_delay_jitter_seconds",
+    "detail_request_delay_seconds",
+    "detail_request_delay_jitter_seconds",
+    "fetch_timeout",
+    "login_enabled",
+    "login_username",
+    "login_password",
+    "playwright_login_url",
+    "playwright_login_entry_xpath",
+    "playwright_login_username_xpath",
+    "playwright_login_password_xpath",
+    "playwright_login_submit_xpath",
+    "playwright_login_success_xpath",
+    "playwright_login_timeout",
+    "playwright_headless",
+    "enable_content_image_placeholder",
+    "content_root_xpath",
+    "content_image_xpath",
+    "content_image_placeholder_template",
+    "append_content_image_mapping",
+    "category",
     "min_content_length",
     "max_content_length",
     "dedupe_urls",
@@ -946,6 +1074,28 @@ def task_to_form_values(task: Dict[str, Any], include_task_id: bool = False) -> 
             int(task.get("list_retry_sleep_seconds", 3) or 0),
             int(task.get("detail_retry_count", 0) or 0),
             int(task.get("detail_retry_sleep_seconds", 2) or 0),
+            float(task.get("home_request_delay_seconds", 0) or 0),
+            float(task.get("home_request_delay_jitter_seconds", 0) or 0),
+            float(task.get("detail_request_delay_seconds", 0) or 0),
+            float(task.get("detail_request_delay_jitter_seconds", 0) or 0),
+            int(task.get("fetch_timeout", 360) or 360),
+            bool(task.get("login_enabled", False)),
+            task.get("login_username", "") or "",
+            task.get("login_password", "") or "",
+            task.get("playwright_login_url", "") or "",
+            task.get("playwright_login_entry_xpath", "") or "",
+            task.get("playwright_login_username_xpath", "") or "",
+            task.get("playwright_login_password_xpath", "") or "",
+            task.get("playwright_login_submit_xpath", "") or "",
+            task.get("playwright_login_success_xpath", "") or "",
+            int(task.get("playwright_login_timeout", 60) or 60),
+            bool(task.get("playwright_headless", True)),
+            bool(task.get("enable_content_image_placeholder", False)),
+            stringify_xpath(task.get("content_root_xpath")),
+            stringify_xpath(task.get("content_image_xpath")),
+            task.get("content_image_placeholder_template", "![图片{index}]({url})") or "![图片{index}]({url})",
+            bool(task.get("append_content_image_mapping", False)),
+            task.get("category", "") or "",
             int(task.get("min_content_length", 0) or 0),
             int(task.get("max_content_length", 0) or 0),
             bool(task.get("dedupe_urls", False)),
@@ -1010,6 +1160,30 @@ def build_payload_from_form(*values: Any) -> Dict[str, Any]:
         "list_retry_sleep_seconds": int(form.get("list_retry_sleep_seconds") or 0),
         "detail_retry_count": int(form.get("detail_retry_count") or 0),
         "detail_retry_sleep_seconds": int(form.get("detail_retry_sleep_seconds") or 0),
+        "home_request_delay_seconds": float(form.get("home_request_delay_seconds") or 0),
+        "home_request_delay_jitter_seconds": float(form.get("home_request_delay_jitter_seconds") or 0),
+        "detail_request_delay_seconds": float(form.get("detail_request_delay_seconds") or 0),
+        "detail_request_delay_jitter_seconds": float(form.get("detail_request_delay_jitter_seconds") or 0),
+        "fetch_timeout": int(form.get("fetch_timeout") or 360),
+        "login_enabled": parse_checkbox_value(form.get("login_enabled")),
+        "login_username": str(form.get("login_username", "") or "").strip(),
+        "login_password": str(form.get("login_password", "") or "").strip(),
+        "playwright_login_url": parse_optional_text(form.get("playwright_login_url")),
+        "playwright_login_entry_xpath": parse_optional_text(form.get("playwright_login_entry_xpath")),
+        "playwright_login_username_xpath": parse_optional_text(form.get("playwright_login_username_xpath")),
+        "playwright_login_password_xpath": parse_optional_text(form.get("playwright_login_password_xpath")),
+        "playwright_login_submit_xpath": parse_optional_text(form.get("playwright_login_submit_xpath")),
+        "playwright_login_success_xpath": parse_optional_text(form.get("playwright_login_success_xpath")),
+        "playwright_login_timeout": int(form.get("playwright_login_timeout") or 60),
+        "playwright_headless": parse_checkbox_value(form.get("playwright_headless")),
+        "enable_content_image_placeholder": parse_checkbox_value(form.get("enable_content_image_placeholder")),
+        "content_root_xpath": parse_xpath_value(str(form.get("content_root_xpath", "") or "")),
+        "content_image_xpath": parse_xpath_value(str(form.get("content_image_xpath", "") or "")),
+        "content_image_placeholder_template": str(
+            form.get("content_image_placeholder_template", "![图片{index}]({url})") or "![图片{index}]({url})"
+        ).strip(),
+        "append_content_image_mapping": parse_checkbox_value(form.get("append_content_image_mapping")),
+        "category": str(form.get("category", "") or "").strip(),
         "min_content_length": min_content_length,
         "max_content_length": max_content_length,
         "dedupe_urls": parse_checkbox_value(form.get("dedupe_urls")),
@@ -1067,48 +1241,114 @@ def build_task_form(section_title: str, section_subtitle: str, include_task_id: 
     gr.Markdown(f"## {section_title}")
     gr.Markdown(section_subtitle)
     with gr.Group():
+        gr.Markdown(
+            """
+            <div class="section-note">
+              <strong>快速上手：</strong>先填写基础信息、URL 与三个核心 XPath（列表链接 / 标题 / 正文）。
+              其余参数按需展开，避免一次性处理全部配置造成认知负担。
+            </div>
+            """
+        )
         if include_task_id:
             form["task_id"] = gr.Textbox(label="任务 ID", interactive=False)
-        with gr.Row():
-            form["task_name"] = gr.Textbox(label="任务标题")
-            form["source_name"] = gr.Textbox(label="来源标识")
-            form["source_language"] = gr.Textbox(label="来源语言", value="auto")
-        form["description"] = gr.Textbox(label="任务描述", lines=2)
-        with gr.Row():
-            form["prefix"] = gr.Textbox(label="URL 前缀")
-            form["content_joiner"] = gr.Textbox(label="正文拼接符", value=" ")
-            form["default_image_url"] = gr.Textbox(label="默认图片 URL")
-        form["home_url_list"] = gr.Textbox(label="首页 URL 列表", lines=3, placeholder="每行一个 URL")
-        with gr.Row():
-            form["url_xpath"] = gr.Textbox(label="列表链接 XPath", lines=3)
-            form["title_xpath"] = gr.Textbox(label="标题 XPath", lines=3)
-        with gr.Row():
-            form["content_xpath"] = gr.Textbox(label="正文 XPath", lines=4)
-            form["home_date_xpath"] = gr.Textbox(label="列表日期 XPath", lines=4)
-        with gr.Row():
-            form["date_xpath"] = gr.Textbox(label="详情日期 XPath", lines=3)
-            form["image_xpath"] = gr.Textbox(label="列表图片 XPath", lines=3)
-            form["detail_image_xpath"] = gr.Textbox(label="详情图片 XPath", lines=3)
-        form["home_wait_xpath"] = gr.Textbox(label="首页等待 XPath", lines=2)
-        form["detail_wait_xpath"] = gr.Textbox(label="详情等待 XPath", lines=2)
-        with gr.Row():
-            form["url_limit"] = gr.Number(label="抓取上限", value=10, precision=0)
-            form["list_retry_count"] = gr.Number(label="列表重试次数", value=1, precision=0)
-            form["list_retry_sleep_seconds"] = gr.Number(label="列表重试间隔秒", value=3, precision=0)
-            form["detail_retry_count"] = gr.Number(label="详情重试次数", value=0, precision=0)
-            form["detail_retry_sleep_seconds"] = gr.Number(label="详情重试间隔秒", value=2, precision=0)
-            form["min_content_length"] = gr.Number(label="正文最小长度", value=0, precision=0)
-            form["max_content_length"] = gr.Number(label="正文最大长度", value=0, precision=0)
-        with gr.Row():
-            form["schedule_type"] = gr.Dropdown(label="调度类型", choices=["manual", "interval", "cron"], value="manual")
-            form["interval_seconds"] = gr.Number(label="间隔秒数", value=0, precision=0)
-            form["cron_expression"] = gr.Textbox(label="Cron 表达式")
-        with gr.Row():
-            form["dedupe_urls"] = gr.Checkbox(label="URL 去重", value=False, interactive=True)
-            form["schedule_enabled"] = gr.Checkbox(label="启用调度", value=False, interactive=True)
-        with gr.Row():
-            form["source_map"] = gr.Textbox(label="来源映射 JSON", lines=8, value="{}")
-            form["date_patterns"] = gr.Textbox(label="日期格式列表", lines=6, placeholder="每行一个日期格式")
+
+        with gr.Accordion("1) 基础信息（必填优先）", open=True):
+            with gr.Row():
+                form["task_name"] = gr.Textbox(label="任务标题", placeholder="例如：jmd-crawler")
+                form["source_name"] = gr.Textbox(label="来源标识", placeholder="例如：jmd")
+                form["source_language"] = gr.Textbox(label="来源语言", value="auto", placeholder="auto / zh / en / ja ...")
+            with gr.Row():
+                form["category"] = gr.Textbox(label="业务分类（可选）", placeholder="例如：shipping-news")
+                form["prefix"] = gr.Textbox(label="URL 前缀", placeholder="例如：https://www.jmd.co.jp")
+            form["description"] = gr.Textbox(label="任务描述", lines=2)
+            form["home_url_list"] = gr.Textbox(label="首页 URL 列表", lines=3, placeholder="每行一个 URL")
+
+        with gr.Accordion("2) 解析规则（XPath）", open=True):
+            with gr.Row():
+                form["url_xpath"] = gr.Textbox(label="列表链接 XPath", lines=3)
+                form["title_xpath"] = gr.Textbox(label="标题 XPath", lines=3)
+            with gr.Row():
+                form["content_xpath"] = gr.Textbox(label="正文 XPath", lines=4)
+                form["home_date_xpath"] = gr.Textbox(label="列表日期 XPath", lines=4)
+            with gr.Row():
+                form["date_xpath"] = gr.Textbox(label="详情日期 XPath", lines=3)
+                form["image_xpath"] = gr.Textbox(label="列表图片 XPath", lines=3)
+                form["detail_image_xpath"] = gr.Textbox(label="详情图片 XPath", lines=3)
+            with gr.Row():
+                form["home_wait_xpath"] = gr.Textbox(label="首页等待 XPath", lines=2)
+                form["detail_wait_xpath"] = gr.Textbox(label="详情等待 XPath", lines=2)
+
+        with gr.Accordion("3) 抓取策略（稳定性与长度过滤）", open=False):
+            with gr.Row():
+                form["url_limit"] = gr.Number(label="抓取上限", value=10, precision=0)
+                form["fetch_timeout"] = gr.Number(label="抓取超时秒", value=360, precision=0)
+                form["dedupe_urls"] = gr.Checkbox(label="URL 去重", value=False, interactive=True)
+            with gr.Row():
+                form["list_retry_count"] = gr.Number(label="列表重试次数", value=1, precision=0)
+                form["list_retry_sleep_seconds"] = gr.Number(label="列表重试间隔秒", value=3, precision=0)
+                form["detail_retry_count"] = gr.Number(label="详情重试次数", value=0, precision=0)
+                form["detail_retry_sleep_seconds"] = gr.Number(label="详情重试间隔秒", value=2, precision=0)
+            with gr.Row():
+                form["home_request_delay_seconds"] = gr.Number(label="首页固定延迟秒", value=0, precision=2)
+                form["home_request_delay_jitter_seconds"] = gr.Number(label="首页抖动秒", value=0, precision=2)
+                form["detail_request_delay_seconds"] = gr.Number(label="详情固定延迟秒", value=0, precision=2)
+                form["detail_request_delay_jitter_seconds"] = gr.Number(label="详情抖动秒", value=0, precision=2)
+            with gr.Row():
+                form["min_content_length"] = gr.Number(label="正文最小长度", value=0, precision=0)
+                form["max_content_length"] = gr.Number(label="正文最大长度", value=0, precision=0)
+
+        with gr.Accordion("4) 调度配置", open=False):
+            with gr.Row():
+                form["schedule_type"] = gr.Dropdown(label="调度类型", choices=["manual", "interval", "cron"], value="manual")
+                form["interval_seconds"] = gr.Number(label="间隔秒数", value=0, precision=0)
+                form["cron_expression"] = gr.Textbox(label="Cron 表达式")
+                form["schedule_enabled"] = gr.Checkbox(label="启用调度", value=False, interactive=True)
+
+        with gr.Accordion("5) 来源映射与日期格式", open=False):
+            with gr.Row():
+                form["content_joiner"] = gr.Textbox(label="正文拼接符", value=" ")
+                form["default_image_url"] = gr.Textbox(label="默认图片 URL")
+            with gr.Row():
+                form["source_map"] = gr.Textbox(label="来源映射 JSON", lines=8, value="{}")
+                form["date_patterns"] = gr.Textbox(label="日期格式列表", lines=6, placeholder="每行一个日期格式")
+
+        with gr.Accordion("6) 高级能力：登录态与图文占位", open=False):
+            with gr.Row():
+                form["login_enabled"] = gr.Checkbox(label="启用 Playwright 登录态", value=False, interactive=True)
+                form["playwright_headless"] = gr.Checkbox(label="Playwright 无头模式", value=True, interactive=True)
+                form["playwright_login_timeout"] = gr.Number(label="登录超时秒", value=60, precision=0)
+            with gr.Row():
+                form["login_username"] = gr.Textbox(label="登录用户名")
+                form["login_password"] = gr.Textbox(label="登录密码", type="password")
+                form["playwright_login_url"] = gr.Textbox(label="登录页 URL")
+            with gr.Row():
+                form["playwright_login_entry_xpath"] = gr.Textbox(label="登录入口 XPath", lines=2)
+                form["playwright_login_username_xpath"] = gr.Textbox(label="用户名 XPath", lines=2)
+                form["playwright_login_password_xpath"] = gr.Textbox(label="密码 XPath", lines=2)
+            with gr.Row():
+                form["playwright_login_submit_xpath"] = gr.Textbox(label="提交按钮 XPath", lines=2)
+                form["playwright_login_success_xpath"] = gr.Textbox(label="登录成功等待 XPath", lines=2)
+            with gr.Row():
+                form["enable_content_image_placeholder"] = gr.Checkbox(label="正文启用图片 Markdown 占位", value=False, interactive=True)
+                form["append_content_image_mapping"] = gr.Checkbox(label="正文追加图片映射", value=False, interactive=True)
+            with gr.Row():
+                form["content_root_xpath"] = gr.Textbox(label="正文根节点 XPath", lines=2)
+                form["content_image_xpath"] = gr.Textbox(label="正文图片 XPath", value=".//img/@src", lines=2)
+            with gr.Row():
+                form["content_image_placeholder_template"] = gr.Textbox(
+                    label="图片占位模板",
+                    value="![图片{index}]({url})",
+                )
+
+        with gr.Accordion("使用建议", open=False):
+            gr.Markdown(
+                """
+                - 常规站点：只需先完成 1) + 2) + 3) 的核心配置。
+                - 需要定时：再填写 4) 调度配置。
+                - 登录墙或图文混排：再展开 6) 高级能力。
+                - 推荐先点击“填充示例”，再按站点差异做最小改动。
+                """
+            )
     return form
 
 

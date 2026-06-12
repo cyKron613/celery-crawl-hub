@@ -1,3 +1,38 @@
+import os
+import sys
+import pathlib
+
+def _check_env_file():
+    """检查 .env 文件是否存在或关键环境变量已注入（Docker Compose 场景）。"""
+    project_root = pathlib.Path(__file__).resolve().parent
+    env_file = project_root / ".env"
+    env_example = project_root / ".env.example"
+    
+    # 如果 .env 文件存在，直接通过
+    if env_file.exists():
+        return
+    
+    # Docker Compose 通过 env_file 指令注入环境变量，容器内没有物理 .env 文件
+    # 检查关键环境变量是否已注入
+    critical_vars = ["POSTGRES_HOST", "CELERY_BROKER_URL", "BACKEND_SERVER_HOST"]
+    if all(os.getenv(var) for var in critical_vars):
+        return  # 环境变量已注入（Docker Compose 场景）
+    
+    # 既没有 .env 文件，也没有关键环境变量
+    print("=" * 60)
+    print("❌ 未找到 .env 文件，应用无法启动。")
+    print()
+    print("请先复制环境变量模板：")
+    print(f"  cp .env.example .env")
+    print()
+    if env_example.exists():
+        print(f"模板文件位于: {env_example}")
+    print("按需修改后重新启动即可。")
+    print("=" * 60)
+    sys.exit(1)
+
+_check_env_file()
+
 import fastapi
 import fastapi_cdn_host
 import uvicorn

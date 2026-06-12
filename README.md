@@ -1,115 +1,117 @@
 # Celery Crawl Hub
 
-Celery Crawl Hub 是一个基于 FastAPI、Celery、Redis、PostgreSQL 和 Playwright 的可配置低代码爬虫任务平台。它支持通过 API 或 Gradio 控制台管理爬虫任务、手动执行任务、按 interval/cron 调度任务，并记录任务执行结果。
+Celery Crawl Hub 是一个基于 FastAPI、Celery、Redis、PostgreSQL 和 Playwright 的可配置低代码爬虫任务平台。它提供自动化的采集流、任务调度以及一个現代化的 React 前端管理界面。
 
 ## 功能特性
 
 - **低代码爬虫配置**：通过 XPath、URL 列表、重试策略、内容长度过滤等字段定义采集规则。
-- **任务管理 API**：提供任务创建、导入、更新、删除、执行、调度与结果查询接口。
+- **任务管理 API**：提供任务创建、测试、执行、调度与结果查询。支持实时 XPath 验证接口。
+- **React 管理看板**：基于 Node.js (React + Vite) 构建的現代化前端，支持弹窗编辑和一键填充模板。
 - **异步任务调度**：基于 Celery worker 和 Celery beat 支持定时扫描与分发。
-- **浏览器采集能力**：集成 Playwright，适合动态页面抓取场景。
-- **数据库持久化**：任务、执行记录与采集结果可落 PostgreSQL / 兼容数据库。
-- **Redis 支持**：用于 Celery broker/result backend，也可作为缓存组件。
-- **Gradio 控制台**：提供基础可视化操作入口。
-- **容器化部署**：内置 Dockerfile 和 Docker Compose 示例。
+- **浏览器采集能力**：集成 Playwright，支持动态页面。
+- **XPath 实时验证**：支持在创建任务时一键测试 XPath 提取结果，降低配置调试成本。
+- **容器化部署**：一键启动 API、Worker、Beat、Redis、Postgres 和 Web Nginx 控制台。
 
 ## 技术栈
 
-- Python 3.12+
-- FastAPI / Uvicorn
-- Celery / Redis
-- SQLAlchemy / asyncpg / psycopg2 / PyMySQL
-- PostgreSQL
-- Playwright
-- Gradio
+- **后端**: Python 3.12+, FastAPI, Celery, SQLAlchemy
+- **前端**: Node.js, React, Vite, TypeScript
+- **数据库/缓存**: PostgreSQL, Redis
+- **采集引擎**: Playwright, DrissionPage
+- **部署**: Docker, Docker Compose
 
 ## 项目结构
 
 ```text
 .
 ├── main.py                         # FastAPI 应用入口
-├── gradio_app.py                   # Gradio 控制台入口
-├── requirements.txt                # Python 依赖
-├── .env.example                    # 环境变量模板
+├── web/                            # React 前端代码 (Node.js/Vite)
 ├── deploy/
-│   └── docker/                     # Dockerfile / Compose
+│   └── docker/                     # Dockerfile / Compose 配置
 ├── docs/                           # API 文档
 ├── sql/                            # 初始化 SQL
 └── src/
-    ├── main/api/                   # FastAPI 路由
-    ├── main/config/                # 配置、生命周期、中间件
-    ├── main/models/                # ORM 模型
-    ├── main/repository/            # 数据访问层
-    ├── main/service/               # 业务服务
-    ├── main/tasks/                 # Celery app 与任务
-    └── utils/                      # 爬虫、数据库、OBS、AI 等工具
+    ├── main/api/                   # FastAPI 路由与接口实现
+    ├── main/service/               # 业务逻辑层
+    ├── main/tasks/                 # Celery app 与自动化任务
+    └── utils/                      # 爬虫引擎、数据库工具、AI 工具等
 ```
+
+## 核心接口说明
+
+| 路径 | 方法 | 描述 |
+| :--- | :--- | :--- |
+| `/api/v1/crawler/tasks` | GET/POST | 获取/创建爬虫任务 |
+| `/api/v1/crawler/test-xpath` | POST | **[NEW]** 实时测试 XPath 提取效果 |
+| `/api/v1/crawler/tasks/{id}/run` | POST | 立即手动触发任务执行 |
+| `/api/v1/crawler/inserted-data` | GET | 分页查看已采集并入库的正式数据 |
 
 ## 快速开始
 
 ### 1. 准备环境变量
 
-复制环境变量模板：
+复制环境变量模板并根据实际环境修改：
 
 ```bash
+# 生产环境
 cp .env.example .env
+
+# 本地开发环境（make deploy-dev 使用）
+cp .env.dev.example .env.dev
 ```
 
-然后按实际环境修改 `.env`。最少需要确认以下配置：
+### 2. 启动前端与全栈 (Docker 推荐)
 
-- `BACKEND_SERVER_HOST` / `BACKEND_SERVER_PORT`
-- `DOCS_AUTH_USERNAME` / `DOCS_AUTH_PASSWORD`
-- `POSTGRES_*`
-- `POSTGRES_SCHEMA`
-- `CELERY_BROKER_URL`
-- `CELERY_RESULT_BACKEND`
-- `PROD_REDIS_*` / `TEST_REDIS_*`
-
-完整模板见 [.env.example](.env.example)。请勿提交真实 `.env` 文件。
-
-### 2. 本地 Python 启动
-
-安装依赖：
+使用项目根目录的 `Makefile` 进行一键部署：
 
 ```bash
+# 本地开发部署 (使用 .env.dev)
+make deploy-dev
+
+# 生产部署 (使用 .env)
+make deploy
+```
+
+启动后访问：
+- **管理看板 (Web)**: `http://localhost:3000`
+- **接口文档 (Swagger)**: `http://localhost:8000/docs`
+
+### 3. 本地手动启动
+
+> **前提**：本地裸跑需要先准备 `.env` 并确保 PostgreSQL 和 Redis 已启动。
+> 如未创建 `.env`，`python main.py` 会给出友好提示。
+
+#### 后端
+```bash
+cp .env.example .env   # 如尚未准备
 pip install -r requirements.txt
-python -m playwright install chromium
-```
-
-初始化数据库表（三个业务表：`crawler_tasks`、`ex_crawl_log`、`ex_shipping_information`）：
-
-```bash
-psql "$DATABASE_URL" -f sql/init_all.sql
-```
-
-> 项目未集成 Alembic 等迁移工具，也不会在应用启动时自动 `create_all`，需手动执行上述 SQL。Docker Compose 启动时会自动加载 `sql/` 下的这三个脚本。
-
-启动 API：
-
-```bash
 python main.py
 ```
 
-启动 Celery worker：
+#### 前端 (Node.js)
+```bash
+cd web
+cp .env.example .env   # 配置 API 地址，默认指向 http://127.0.0.1:8000/api
+npm install
+npm run dev
+```
 
+#### Celery worker
 ```bash
 celery -A src.main.tasks.celery_app:celery_app worker -Q celery -l info --pool=solo --concurrency=1
 ```
 
-启动翻译/扩展队列 worker：
-
+#### Celery 翻译 worker
 ```bash
 celery -A src.main.tasks.celery_app:celery_app worker -Q translate_schedule -l info --pool=solo --concurrency=1
 ```
 
-启动 Celery beat：
-
+#### Celery beat（定时调度）
 ```bash
 celery -A src.main.tasks.celery_app:celery_app beat -l info
 ```
 
-启动 Gradio 控制台：
-
+#### Gradio 控制台
 ```bash
 python gradio_app.py
 ```
@@ -118,6 +120,7 @@ python gradio_app.py
 
 - API 登录页：`http://127.0.0.1:8000/login`
 - API 文档：`http://127.0.0.1:8000/api-doc.html`
+- 前端看板：`http://127.0.0.1:5173`（Vite dev server）
 - Gradio 控制台：`http://127.0.0.1:7860`
 
 ## Docker Compose
