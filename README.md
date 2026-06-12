@@ -6,10 +6,11 @@ Celery Crawl Hub 是一个基于 FastAPI、Celery、Redis、PostgreSQL 和 Playw
 
 - **低代码爬虫配置**：通过 XPath、URL 列表、重试策略、内容长度过滤等字段定义采集规则。
 - **任务管理 API**：提供任务创建、测试、执行、调度与结果查询。支持实时 XPath 验证接口。
-- **React 管理看板**：基于 Node.js (React + Vite) 构建的現代化前端，支持弹窗编辑和一键填充模板。
+- **React 管理看板**：基于 Node.js (React + Vite) 构建的現代化前端，支持弹窗编辑、一键填充模板和 Python 模板编辑器。
 - **异步任务调度**：基于 Celery worker 和 Celery beat 支持定时扫描与分发。
 - **浏览器采集能力**：集成 Playwright，支持动态页面。
 - **XPath 实时验证**：支持在创建任务时一键测试 XPath 提取结果，降低配置调试成本。
+- **Python 模板编辑器**：在创建任务时可通过内置 Python 代码编辑器编写爬虫类定义，自动解析属性并映射到表单配置，无需手动逐项填写。
 - **容器化部署**：一键启动 API、Worker、Beat、Redis、Postgres 和 Web Nginx 控制台。
 
 ## 技术栈
@@ -172,6 +173,50 @@ make down
 
 > Compose 中把容器内数据库与 Redis 主机自动覆盖为 `postgres` / `redis`，本地 `.env` 仍可保留 `localhost` 便于非容器方式调试。
 > Compose 不再触发构建（`pull_policy: never`），所以执行 `up` 前必须先 `make build` 或手动构建过镜像。
+
+## 使用指南
+
+### 创建爬虫任务
+
+1. 访问前端管理看板（默认 `http://localhost:3000`）
+2. 点击「创建任务」进入配置页面
+3. 填写基础信息（任务名称、来源标识、首页 URL 等）
+4. 配置 XPath 解析规则（支持实时测试验证）
+5. 设置抓取策略（重试次数、延迟、并发等）
+6. 点击「创建任务」保存配置
+
+### Python 模板编辑器
+
+对于熟悉 Python 的开发者，可以使用内置的模板编辑器快速生成任务配置：
+
+1. 在创建任务页面点击「模板编辑器」按钮
+2. 在弹出的代码编辑器中编写继承 `XPathCrawlerTaskBase` 的爬虫类
+3. 定义类属性（如 `source_name`、`url_xpath`、`title_xpath` 等）
+4. 点击「生成配置」，系统会自动解析类属性并映射到表单
+5. 检查映射结果，必要时手动调整后创建任务
+
+示例模板：
+
+```python
+class MyCrawlerTask(XPathCrawlerTaskBase):
+    source_name = "example-news"
+    prefix = "https://example.com"
+    home_url_list = ["https://example.com/news"]
+    url_xpath = "//article//a/@href"
+    title_xpath = "//h1[@class='title']/text()"
+    content_xpath = "//div[@class='content']//p/text()"
+    date_xpath = "//time/@datetime"
+    detail_wait_xpath = "//h1[@class='title']"
+```
+
+### XPath 实时测试
+
+在配置 XPath 规则时，可以使用内置的测试功能：
+
+1. 在任意 XPath 字段旁点击「测试」按钮
+2. 输入目标页面 URL
+3. 系统会实时执行 XPath 并显示提取结果
+4. 根据结果调整 XPath 表达式直到正确
 
 ## API 文档
 

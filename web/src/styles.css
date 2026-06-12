@@ -484,3 +484,93 @@ button.xpath-test-btn:hover {
     grid-template-columns: 1fr;
   }
 }
+
+.template-python-editor {
+  width: 100%;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 14px;
+  border: 1px solid #bdd2ea;
+  border-radius: 8px;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  resize: vertical;
+  margin-top: 12px;
+  tab-size: 4;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.template-python-editor:focus {
+  outline: none;
+  border-color: #1f7ae0;
+  box-shadow: 0 0 0 3px rgba(31, 122, 224, 0.15);
+}
+
+.template-python-editor::placeholder {
+  color: #6c7086;
+}
+
+.status.error {
+  color: var(--danger);
+  background: #fdebed;
+  border: 1px solid #f5c6cb;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.template-attrs-table {
+  margin-top: 12px;
+  border: 1px solid #bdd2ea;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.template-attrs-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.template-attrs-table th {
+  background: #eef5ff;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #14406d;
+  border-bottom: 1px solid #bdd2ea;
+}
+
+.template-attrs-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e1ebf5;
+}
+
+.template-attrs-table tr:last-child td {
+  border-bottom: none;
+}
+
+.template-attrs-table .attr-key {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #1f7ae0;
+  font-weight: 600;
+  white-space: nowrap;
+  width: 200px;
+}
+
+.template-attrs-table input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #bdd2ea;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+}
+
+.template-attrs-table input:focus {
+  outline: none;
+  border-color: #1f7ae0;
+  box-shadow: 0 0 0 3px rgba(31, 122, 224, 0.1);
+}

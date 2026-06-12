@@ -42,6 +42,233 @@ const createTemplateForm = (): TaskFormData => ({
 
 type OnTaskFieldChange = <K extends keyof TaskFormData>(key: K, value: TaskFormData[K]) => void
 
+const DEFAULT_PYTHON_TEMPLATE = `class SCOCrawlerTask(XPathCrawlerTaskBase):
+    source_name = "sco"
+    prefix = "https://eng.sectsco.org"
+    home_url_list = [
+        'https://eng.sectsco.org/search/'
+    ]
+    url_xpath = '//article[@class="list-item"]/a/@href'
+    date_xpath = "//time[@class='article-header__date']//text()"
+    title_xpath = '//h1[@class="article-header__title"]//text()'
+    content_xpath = "//div[@class='article-body__block article-body__block_text']//text()"
+    image_xpath = "//fugure[@class='list-item__image']//img/@src"
+
+    detail_wait_xpath = '//h1[@class="article-header__title"]'
+    detail_retry_count = 1
+    detail_retry_sleep_seconds = 2
+`
+
+// ── Python 模板解析 ──────────────────────────────────────────────
+
+/** XPathCrawlerTaskBase 中所有可映射到 TaskFormData 的属性名集合 */
+const MAPPABLE_KEYS = new Set<string>([
+  'source_name', 'prefix', 'home_url_list',
+  'url_xpath', 'title_xpath', 'content_xpath',
+  'home_date_xpath', 'date_xpath', 'image_xpath', 'detail_image_xpath',
+  'url_limit', 'list_retry_count', 'list_retry_sleep_seconds',
+  'detail_retry_count', 'detail_retry_sleep_seconds',
+  'home_request_delay_seconds', 'home_request_delay_jitter_seconds',
+  'detail_request_delay_seconds', 'detail_request_delay_jitter_seconds',
+  'dedupe_urls', 'home_wait_xpath', 'detail_wait_xpath',
+  'fetch_timeout', 'min_content_length', 'max_content_length',
+  'login_enabled', 'login_username', 'login_password',
+  'playwright_login_url', 'playwright_login_entry_xpath',
+  'playwright_login_username_xpath', 'playwright_login_password_xpath',
+  'playwright_login_submit_xpath', 'playwright_login_success_xpath',
+  'playwright_login_timeout', 'playwright_headless',
+  'enable_content_image_placeholder',
+  'content_root_xpath', 'content_image_xpath',
+  'content_image_placeholder_template', 'append_content_image_mapping',
+  'source_language', 'source_map', 'category',
+  'content_joiner', 'default_image_url', 'date_patterns',
+])
+
+/** 从 Python 源码中提取指定 class 体的文本 */
+function extractClassBody(source: string, baseClassName: string): string | null {
+  // 匹配 class Xxx(XPathCrawlerTaskBase): 或 class Xxx(XPathCrawlerTaskBase, ...):
+  const classPattern = new RegExp(
+    `class\\s+\\w+\\s*\\([^)]*${baseClassName}[^)]*\\)\\s*:`,
+    'm',
+  )
+  const match = classPattern.exec(source)
+  if (!match) return null
+
+  const bodyStart = match.index + match[0].length
+  // 类体 = 从 class 行之后到下一个非缩进行（或文件结尾）
+  const lines = source.slice(bodyStart).split('\n')
+  const bodyLines: string[] = []
+  for (const line of lines) {
+    // 空行或缩进行属于类体
+    if (line.trim() === '' || /^\s+/.test(line)) {
+      bodyLines.push(line)
+    } else {
+      break
+    }
+  }
+  return bodyLines.join('\n')
+}
+
+/** 解析 Python 字面量值 → JS 值 */
+function parsePythonValue(raw: string): unknown {
+  const trimmed = raw.trim()
+
+  // 布尔
+  if (trimmed === 'True') return true
+  if (trimmed === 'False') return false
+  if (trimmed === 'None') return null
+
+  // 数字
+  if (/^-?\d+$/.test(trimmed)) return parseInt(trimmed, 10)
+  if (/^-?\d+\.\d+$/.test(trimmed)) return parseFloat(trimmed)
+
+  // 字符串（单引号或双引号，支持三引号）
+  const strMatch = trimmed.match(/^(?:"""([\s\S]*?)"""|'''([\s\S]*?)'''|"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')$/)
+  if (strMatch) {
+    return strMatch[1] ?? strMatch[2] ?? strMatch[3] ?? strMatch[4] ?? ''
+  }
+
+  // 列表 [...]
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const inner = trimmed.slice(1, -1).trim()
+    if (!inner) return []
+    // 简单拆分：按逗号分割，逐个解析
+    const items: unknown[] = []
+    let depth = 0
+    let current = ''
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i]
+      if (ch === '[' || ch === '(' || ch === '{') depth++
+      else if (ch === ']' || ch === ')' || ch === '}') depth--
+      if (ch === ',' && depth === 0) {
+        items.push(parsePythonValue(current))
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+    if (current.trim()) items.push(parsePythonValue(current))
+    return items
+  }
+
+  // 字典 {...}
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    const inner = trimmed.slice(1, -1).trim()
+    if (!inner) return {}
+    const result: Record<string, unknown> = {}
+    // 简单 key: value 拆分
+    let depth = 0
+    let current = ''
+    const pairs: string[] = []
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i]
+      if (ch === '[' || ch === '(' || ch === '{') depth++
+      else if (ch === ']' || ch === ')' || ch === '}') depth--
+      if (ch === ',' && depth === 0) {
+        pairs.push(current)
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+    if (current.trim()) pairs.push(current)
+    for (const pair of pairs) {
+      const colonIdx = pair.indexOf(':')
+      if (colonIdx > 0) {
+        const key = parsePythonValue(pair.slice(0, colonIdx)) as string
+        const val = parsePythonValue(pair.slice(colonIdx + 1))
+        result[String(key)] = val
+      }
+    }
+    return result
+  }
+
+  // 无法解析，返回原始字符串
+  return trimmed
+}
+
+/** 从 Python 类体中提取所有 class-level 属性赋值 */
+function parseClassAttributes(classBody: string): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {}
+  // 匹配: 属性名 = 值（值可能跨多行，如列表）
+  // 策略：逐行扫描，遇到 `name = ...` 开始收集，直到下一个 `name = ...` 或结束
+  const lines = classBody.split('\n')
+  let currentKey = ''
+  let currentValue = ''
+
+  function flush() {
+    if (currentKey && MAPPABLE_KEYS.has(currentKey)) {
+      attrs[currentKey] = parsePythonValue(currentValue)
+    }
+    currentKey = ''
+    currentValue = ''
+  }
+
+  for (const line of lines) {
+    const stripped = line.trim()
+    // 跳过注释和空行
+    if (!stripped || stripped.startsWith('#')) continue
+    // 跳过 def / @decorator / if __name__ 等
+    if (stripped.startsWith('def ') || stripped.startsWith('@') || stripped.startsWith('if ')) {
+      flush()
+      continue
+    }
+
+    // 尝试匹配 `key = value` 或 `key: type = value`
+    const assignMatch = stripped.match(/^(\w+)\s*(?::\s*\S+\s*)?=\s*(.*)$/)
+    if (assignMatch && !line.startsWith(' ') === false && /^\s{4}\w/.test(line)) {
+      // 这是类属性赋值（4空格缩进）
+      flush()
+      currentKey = assignMatch[1]
+      currentValue = assignMatch[2]
+    } else if (currentKey) {
+      // 多行值的续行
+      currentValue += ' ' + stripped
+    }
+  }
+  flush()
+  return attrs
+}
+
+/** 将解析出的 Python 属性映射为 Partial<CrawlerTask> 供 taskToForm 使用 */
+function pythonAttrsToTaskPartial(attrs: Record<string, unknown>): Partial<CrawlerTask> {
+  const partial: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined) continue
+    partial[key] = value
+  }
+  return partial as Partial<CrawlerTask>
+}
+
+/** 解析 Python 模板文件，返回可映射的属性字典 */
+function parsePythonTemplate(source: string): { attrs: Record<string, unknown>; className: string } {
+  // 校验：必须 import XPathCrawlerTaskBase
+  if (!source.includes('XPathCrawlerTaskBase')) {
+    throw new Error('模板必须导入 XPathCrawlerTaskBase（from src.utils.xpath_crawler_base import XPathCrawlerTaskBase）')
+  }
+
+  // 校验：必须有继承 XPathCrawlerTaskBase 的类
+  const classMatch = source.match(/class\s+(\w+)\s*\([^)]*XPathCrawlerTaskBase[^)]*\)\s*:/)
+  if (!classMatch) {
+    throw new Error('模板必须定义一个继承 XPathCrawlerTaskBase 的类')
+  }
+  const className = classMatch[1]
+
+  const classBody = extractClassBody(source, 'XPathCrawlerTaskBase')
+  if (!classBody) {
+    throw new Error(`无法提取类 ${className} 的定义体`)
+  }
+
+  const attrs = parseClassAttributes(classBody)
+
+  // 校验：至少要有 source_name
+  if (!attrs.source_name) {
+    throw new Error('模板类必须定义 source_name 属性')
+  }
+
+  return { attrs, className }
+}
+
 function App() {
   const [panel, setPanel] = useState<Panel>('tasks')
   const [tasks, setTasks] = useState<CrawlerTask[]>([])
@@ -66,6 +293,10 @@ function App() {
   const [insertedPageSize, setInsertedPageSize] = useState(20)
   const [insertedTotalPages, setInsertedTotalPages] = useState(1)
   const [insertedStatus, setInsertedStatus] = useState('等待加载入库数据')
+
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [templateSource, setTemplateSource] = useState(DEFAULT_PYTHON_TEMPLATE)
+  const [templateError, setTemplateError] = useState('')
 
   async function loadTasks(targetPage = tasksPage, pageSize = tasksPageSize) {
     setLoadingTasks(true)
@@ -164,6 +395,28 @@ function App() {
     setEditingTaskId('')
     setForm(createTemplateForm())
     setEditorStatus('已填充模板，请按目标站点调整后创建')
+  }
+
+  function openTemplateModal() {
+    setTemplateSource(DEFAULT_PYTHON_TEMPLATE)
+    setTemplateError('')
+    setTemplateModalOpen(true)
+  }
+
+  function applyTemplateToForm() {
+    try {
+      const { attrs, className } = parsePythonTemplate(templateSource)
+      const partial = pythonAttrsToTaskPartial(attrs)
+      const formData = taskToForm(partial)
+      setForm(formData)
+      setEditorMode('create')
+      setEditingTaskId('')
+      setTemplateModalOpen(false)
+      setEditorStatus(`已从模板 ${className} 生成配置，请检查后创建任务`)
+      setPanel('editor')
+    } catch (err) {
+      setTemplateError(`模板解析失败: ${(err as Error).message}`)
+    }
   }
 
   async function executeNow() {
@@ -401,7 +654,12 @@ function App() {
               <h2>{editorMode === 'create' ? '创建任务' : '编辑任务'}</h2>
               <div className="actions">
                 {editorMode === 'create' && (
-                  <button onClick={applyCreateTemplate}>一键填充模板</button>
+                  <>
+                    <button onClick={applyCreateTemplate}>一键填充模板</button>
+                    <button onClick={openTemplateModal}>
+                      模板编辑器
+                    </button>
+                  </>
                 )}
                 <button onClick={() => {
                   setEditorMode('create')
@@ -416,6 +674,7 @@ function App() {
                 </button>
               </div>
             </header>
+            {templateError && <p className="status error">{templateError}</p>}
             <p className="status">{editorStatus || '按分组完成配置后提交'}</p>
             <TaskFormSections form={form} onField={onField} />
 
@@ -490,6 +749,37 @@ function App() {
           </section>
         )}
       </main>
+
+      {templateModalOpen && (
+        <div className="modal-backdrop" onClick={() => setTemplateModalOpen(false)}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+            <header className="panel-head">
+              <h2>Python 模板编辑器</h2>
+              <div className="actions">
+                <button onClick={() => setTemplateModalOpen(false)}>取消</button>
+                <button className="ok" onClick={applyTemplateToForm}>
+                  生成配置
+                </button>
+              </div>
+            </header>
+            {templateError && <p className="status error">{templateError}</p>}
+            <p className="status">
+              编辑继承 <code>XPathCrawlerTaskBase</code> 的类，点击「生成配置」将属性映射到表单（不会直接创建任务）
+            </p>
+            <textarea
+              className="template-python-editor"
+              value={templateSource}
+              onChange={(e) => {
+                setTemplateSource(e.target.value)
+                setTemplateError('')
+              }}
+              rows={28}
+              spellCheck={false}
+              placeholder="在此编辑 Python 爬虫类定义..."
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -664,7 +954,7 @@ function TaskFormSections(props: { form: TaskFormData; onField: OnTaskFieldChang
       <details open>
         <summary>2. 解析规则与一键测试</summary>
         <div className="xpath-testable-grid">
-          <TextArea label="列表链接 XPath" value={form.url_xpath} onChange={(v) => onField('url_xpath', v)} />
+          <XPathFieldWithTest label="列表链接 XPath" value={form.url_xpath} onChange={(v) => onField('url_xpath', v)} waitXPath={form.home_wait_xpath} />
           <XPathFieldWithTest label="标题 XPath" value={form.title_xpath} onChange={(v) => onField('title_xpath', v)} waitXPath={form.detail_wait_xpath} />
           <XPathFieldWithTest label="正文 XPath" value={form.content_xpath} onChange={(v) => onField('content_xpath', v)} waitXPath={form.detail_wait_xpath} />
           <XPathFieldWithTest label="列表日期 XPath" value={form.home_date_xpath} onChange={(v) => onField('home_date_xpath', v)} waitXPath={form.home_wait_xpath} />
