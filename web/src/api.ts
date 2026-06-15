@@ -4,6 +4,7 @@ import type {
   InsertedDataResult,
   TaskListResult,
   TaskFormData,
+  TemplateParseResult,
 } from './types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
@@ -57,6 +58,23 @@ export function taskToForm(task?: Partial<CrawlerTask>): TaskFormData {
     content_joiner: task?.content_joiner || ' ',
     default_image_url: task?.default_image_url || '',
     date_patterns: (task?.date_patterns || []).join('\n'),
+    login_enabled: !!task?.login_enabled,
+    login_username: task?.login_username || '',
+    login_password: task?.login_password || '',
+    playwright_login_url: task?.playwright_login_url || '',
+    playwright_login_entry_xpath: task?.playwright_login_entry_xpath || '',
+    playwright_login_username_xpath: task?.playwright_login_username_xpath || '',
+    playwright_login_password_xpath: task?.playwright_login_password_xpath || '',
+    playwright_login_submit_xpath: task?.playwright_login_submit_xpath || '',
+    playwright_login_success_xpath: task?.playwright_login_success_xpath || '',
+    playwright_login_timeout: task?.playwright_login_timeout || 60,
+    playwright_headless: task?.playwright_headless !== false,
+    enable_content_image_placeholder: !!task?.enable_content_image_placeholder,
+    content_root_xpath: stringifyXPath(task?.content_root_xpath),
+    content_image_xpath: stringifyXPath(task?.content_image_xpath),
+    content_image_placeholder_template: task?.content_image_placeholder_template || '![图片{index}]({url})',
+    append_content_image_mapping: !!task?.append_content_image_mapping,
+    custom_methods: task?.custom_methods || {},
     schedule_type: task?.schedule_type || 'manual',
     cron_expression: task?.cron_expression || '',
     interval_seconds: task?.interval_seconds || 0,
@@ -108,6 +126,23 @@ export function formToPayload(form: TaskFormData) {
     content_joiner: form.content_joiner,
     default_image_url: form.default_image_url.trim() || null,
     date_patterns: parseLines(form.date_patterns),
+    login_enabled: !!form.login_enabled,
+    login_username: form.login_username.trim(),
+    login_password: form.login_password.trim(),
+    playwright_login_url: form.playwright_login_url.trim(),
+    playwright_login_entry_xpath: form.playwright_login_entry_xpath.trim(),
+    playwright_login_username_xpath: form.playwright_login_username_xpath.trim(),
+    playwright_login_password_xpath: form.playwright_login_password_xpath.trim(),
+    playwright_login_submit_xpath: form.playwright_login_submit_xpath.trim(),
+    playwright_login_success_xpath: form.playwright_login_success_xpath.trim(),
+    playwright_login_timeout: Number(form.playwright_login_timeout || 60),
+    playwright_headless: !!form.playwright_headless,
+    enable_content_image_placeholder: !!form.enable_content_image_placeholder,
+    content_root_xpath: parseXPath(form.content_root_xpath),
+    content_image_xpath: parseXPath(form.content_image_xpath),
+    content_image_placeholder_template: form.content_image_placeholder_template.trim() || '![图片{index}]({url})',
+    append_content_image_mapping: !!form.append_content_image_mapping,
+    custom_methods: form.custom_methods || {},
     schedule_type: form.schedule_type,
     cron_expression: form.cron_expression.trim() || null,
     interval_seconds: form.interval_seconds > 0 ? Number(form.interval_seconds) : null,
@@ -204,4 +239,16 @@ export async function testXPath(payload: {
     throw new Error(envelope.message || `测试请求错误: ${res.status}`)
   }
   return envelope.data?.extracted || []
+}
+
+export async function parseTemplate(source: string): Promise<TemplateParseResult> {
+  const res = await fetch(`${API_BASE_URL}/v1/crawler/parse-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source }),
+  })
+  const data = (await res.json()) as ApiEnvelope<TemplateParseResult>
+  if (!res.ok) throw new Error(data.message || `请求失败: ${res.status}`)
+  if (!data.data) throw new Error('解析结果为空')
+  return data.data
 }

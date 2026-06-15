@@ -310,6 +310,23 @@ def _task_to_runtime_config(task: CrawlerTask) -> dict:
         "content_joiner": task.content_joiner,
         "default_image_url": task.default_image_url,
         "date_patterns": task.date_patterns,
+        "login_enabled": task.login_enabled,
+        "login_username": task.login_username,
+        "login_password": task.login_password,
+        "playwright_login_url": task.playwright_login_url,
+        "playwright_login_entry_xpath": task.playwright_login_entry_xpath,
+        "playwright_login_username_xpath": task.playwright_login_username_xpath,
+        "playwright_login_password_xpath": task.playwright_login_password_xpath,
+        "playwright_login_submit_xpath": task.playwright_login_submit_xpath,
+        "playwright_login_success_xpath": task.playwright_login_success_xpath,
+        "playwright_login_timeout": task.playwright_login_timeout,
+        "playwright_headless": task.playwright_headless,
+        "enable_content_image_placeholder": task.enable_content_image_placeholder,
+        "content_root_xpath": task.content_root_xpath,
+        "content_image_xpath": task.content_image_xpath,
+        "content_image_placeholder_template": task.content_image_placeholder_template,
+        "append_content_image_mapping": task.append_content_image_mapping,
+        "custom_methods": task.custom_methods,
     }
 
 

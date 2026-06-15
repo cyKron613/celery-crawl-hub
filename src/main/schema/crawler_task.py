@@ -61,10 +61,39 @@ class CrawlerTaskBaseRequest(BaseModel):
         ],
         description="日期格式列表",
     )
+    login_enabled: bool = Field(False, description="是否启用Playwright登录")
+    login_username: str = Field("", description="登录账号")
+    login_password: str = Field("", description="登录密码")
+    playwright_login_url: str = Field("", description="Playwright登录页URL")
+    playwright_login_entry_xpath: str = Field("", description="登录入口XPath")
+    playwright_login_username_xpath: str = Field("", description="登录用户名输入框XPath")
+    playwright_login_password_xpath: str = Field("", description="登录密码输入框XPath")
+    playwright_login_submit_xpath: str = Field("", description="登录提交按钮XPath")
+    playwright_login_success_xpath: str = Field("", description="登录成功判断XPath")
+    playwright_login_timeout: int = Field(60, ge=1, le=300, description="登录超时秒数")
+    playwright_headless: bool = Field(True, description="Playwright无头模式")
+    enable_content_image_placeholder: bool = Field(False, description="是否启用正文图片占位")
+    content_root_xpath: XPathInput = Field(None, description="正文根节点XPath")
+    content_image_xpath: XPathInput = Field(None, description="正文图片XPath")
+    content_image_placeholder_template: str = Field("![图片{index}]({url})", description="图片占位模板")
+    append_content_image_mapping: bool = Field(False, description="是否追加图片映射")
+    custom_methods: dict[str, str] = Field(
+        default_factory=dict,
+        description="自定义方法重写源码映射 {method_name: source_code}",
+    )
     schedule_type: str = Field("manual", description="调度类型：manual/interval/cron")
     cron_expression: str | None = Field(None, description="Cron表达式")
     interval_seconds: int | None = Field(None, ge=1, description="间隔秒数")
     schedule_enabled: bool = Field(False, description="是否启用调度")
+
+    @field_validator("custom_methods", mode="before")
+    @classmethod
+    def normalize_custom_methods(cls, value: Any) -> dict[str, str]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise ValueError("custom_methods 必须是对象")
+        return {str(k): str(v) for k, v in value.items() if str(k).strip()}
 
     @field_validator("task_name", "source_name", mode="before")
     @classmethod
@@ -177,6 +206,23 @@ class CrawlerTaskResponse(BaseModel):
     content_joiner: str = Field(..., description="正文拼接符")
     default_image_url: str | None = Field(None, description="默认图片")
     date_patterns: list[str] = Field(default_factory=list, description="日期格式列表")
+    login_enabled: bool = Field(False, description="是否启用Playwright登录")
+    login_username: str = Field("", description="登录账号")
+    login_password: str = Field("", description="登录密码")
+    playwright_login_url: str = Field("", description="Playwright登录页URL")
+    playwright_login_entry_xpath: str = Field("", description="登录入口XPath")
+    playwright_login_username_xpath: str = Field("", description="登录用户名输入框XPath")
+    playwright_login_password_xpath: str = Field("", description="登录密码输入框XPath")
+    playwright_login_submit_xpath: str = Field("", description="登录提交按钮XPath")
+    playwright_login_success_xpath: str = Field("", description="登录成功判断XPath")
+    playwright_login_timeout: int = Field(60, description="登录超时秒数")
+    playwright_headless: bool = Field(True, description="Playwright无头模式")
+    enable_content_image_placeholder: bool = Field(False, description="是否启用正文图片占位")
+    content_root_xpath: XPathInput = Field(None, description="正文根节点XPath")
+    content_image_xpath: XPathInput = Field(None, description="正文图片XPath")
+    content_image_placeholder_template: str = Field("![图片{index}]({url})", description="图片占位模板")
+    append_content_image_mapping: bool = Field(False, description="是否追加图片映射")
+    custom_methods: dict[str, str] = Field(default_factory=dict, description="自定义方法重写源码映射")
     schedule_type: str = Field(..., description="调度类型")
     cron_expression: str | None = Field(None, description="Cron表达式")
     interval_seconds: int | None = Field(None, description="间隔秒数")
@@ -189,6 +235,13 @@ class CrawlerTaskResponse(BaseModel):
     updated_at: datetime | None = Field(None, description="更新时间")
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("custom_methods", mode="before")
+    @classmethod
+    def _coerce_null_custom_methods(cls, value: Any) -> dict[str, str]:
+        if value is None:
+            return {}
+        return value
 
 
 class CrawlerTaskExecutionResponse(BaseModel):
@@ -310,3 +363,20 @@ class CrawlerXPathTestResponseVo(BaseModel):
     code: int = Field(..., description="响应码")
     message: str = Field(..., description="响应消息")
     data: CrawlerXPathTestResult | None = Field(None, description="提取结果")
+
+
+class CrawlerTemplateParseRequest(BaseModel):
+    source: str = Field(..., description="Python 模板源码")
+
+
+class CrawlerTemplateParseResult(BaseModel):
+    class_name: str = Field(..., description="类名")
+    attributes: dict[str, Any] = Field(default_factory=dict, description="可映射的类属性")
+    custom_methods: dict[str, str] = Field(default_factory=dict, description="自定义方法源码映射")
+    all_method_names: list[str] = Field(default_factory=list, description="所有方法名列表")
+
+
+class CrawlerTemplateParseResponseVo(BaseModel):
+    code: int = Field(..., description="响应码")
+    message: str = Field(..., description="响应消息")
+    data: CrawlerTemplateParseResult | None = Field(None, description="解析结果")

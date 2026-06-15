@@ -39,6 +39,23 @@ export interface CrawlerTask {
   content_joiner: string
   default_image_url?: string | null
   date_patterns: string[]
+  login_enabled: boolean
+  login_username: string
+  login_password: string
+  playwright_login_url: string
+  playwright_login_entry_xpath: string
+  playwright_login_username_xpath: string
+  playwright_login_password_xpath: string
+  playwright_login_submit_xpath: string
+  playwright_login_success_xpath: string
+  playwright_login_timeout: number
+  playwright_headless: boolean
+  enable_content_image_placeholder: boolean
+  content_root_xpath?: XPathInput
+  content_image_xpath?: XPathInput
+  content_image_placeholder_template: string
+  append_content_image_mapping: boolean
+  custom_methods: Record<string, string>
   schedule_type: 'manual' | 'interval' | 'cron'
   cron_expression?: string | null
   interval_seconds?: number | null
@@ -106,8 +123,32 @@ export interface TaskFormData {
   content_joiner: string
   default_image_url: string
   date_patterns: string
+  login_enabled: boolean
+  login_username: string
+  login_password: string
+  playwright_login_url: string
+  playwright_login_entry_xpath: string
+  playwright_login_username_xpath: string
+  playwright_login_password_xpath: string
+  playwright_login_submit_xpath: string
+  playwright_login_success_xpath: string
+  playwright_login_timeout: number
+  playwright_headless: boolean
+  enable_content_image_placeholder: boolean
+  content_root_xpath: string
+  content_image_xpath: string
+  content_image_placeholder_template: string
+  append_content_image_mapping: boolean
+  custom_methods: Record<string, string>
   schedule_type: 'manual' | 'interval' | 'cron'
   cron_expression: string
   interval_seconds: number
   schedule_enabled: boolean
+}
+
+export interface TemplateParseResult {
+  class_name: string
+  attributes: Record<string, any>
+  custom_methods: Record<string, string>
+  all_method_names: string[]
 }

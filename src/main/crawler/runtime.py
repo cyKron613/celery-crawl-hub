@@ -3,7 +3,7 @@ import datetime
 import hashlib
 import re
 import time
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
 from dateutil.tz import tzoffset
@@ -11,7 +11,7 @@ from lxml import etree
 from loguru import logger
 
 from src.utils.ai_tools import contains_chinese, match_web_url_class_label, translate_content, translate_title
-from src.utils.playwright_manager import playwright_fetch
+from src.utils.playwright_manager import playwright_fetch, playwright_login_and_get_headers_sync
 from src.utils.source_name_mapping import map_source_name_cn_by_url
 
 
@@ -53,7 +53,7 @@ class ConfigurableXPathCrawler:
         self.detail_wait_xpath: XPathValue = task_config.get("detail_wait_xpath") or []
         self.source_language: str = task_config.get("source_language") or "auto"
         self.source_map: Dict[str, str] = task_config.get("source_map") or {}
-        self.content_joiner: str = task_config.get("content_joiner") or " "
+        self.content_joiner: str = task_config.get("content_joiner") or "\n"
         self.default_image_url: str = task_config.get("default_image_url") or (
             "https://ai-doc.data.myvessel.cn/news/%E8%88%AA%E8%BF%90%E5%BF%AB%E8%AE%AF%E5%A4%B4"
             "%E5%9B%BE.jpg?OSSAccessKeyId=LTAI5t7nfdMfD7YeTFpAENJ4&Expires=2725518616&"
@@ -73,14 +73,245 @@ class ConfigurableXPathCrawler:
             "%Y-%m-%dT%H:%M:%S.%f%z",
             "%Y年%m月%d日"
         ]
+        
+        # 登录相关配置
+        self.login_enabled: bool = task_config.get("login_enabled", False)
+        self.login_username: str = task_config.get("login_username") or ""
+        self.login_password: str = task_config.get("login_password") or ""
+        self.playwright_login_url: str = task_config.get("playwright_login_url") or ""
+        self.playwright_login_entry_xpath: str = task_config.get("playwright_login_entry_xpath") or ""
+        self.playwright_login_username_xpath: str = task_config.get("playwright_login_username_xpath") or ""
+        self.playwright_login_password_xpath: str = task_config.get("playwright_login_password_xpath") or ""
+        self.playwright_login_submit_xpath: str = task_config.get("playwright_login_submit_xpath") or ""
+        self.playwright_login_success_xpath: str = task_config.get("playwright_login_success_xpath") or ""
+        self.playwright_login_timeout: int = task_config.get("playwright_login_timeout", 60)
+        self.playwright_headless: bool = task_config.get("playwright_headless", True)
+        
+        # 正文图片占位配置
+        self.enable_content_image_placeholder: bool = task_config.get("enable_content_image_placeholder", False)
+        self.content_root_xpath: XPathValue = task_config.get("content_root_xpath") or []
+        self.content_image_xpath: XPathValue = task_config.get("content_image_xpath") or []
+        self.content_image_placeholder_template: str = task_config.get("content_image_placeholder_template") or "![图片{index}]({url})"
+        self.append_content_image_mapping: bool = task_config.get("append_content_image_mapping", False)
+        
+        # 登录状态缓存
+        self._login_headers_cache: Dict[str, Dict[str, str]] = {}
+
+        # 动态绑定自定义方法重写
+        self._bind_custom_methods(task_config.get("custom_methods") or {})
+
+    def _bind_custom_methods(self, custom_methods: Dict[str, str]) -> None:
+        """编译并绑定用户定义的自定义方法到当前实例。
+
+        动态编译的函数没有类继承上下文，因此 ``super()`` 无法工作。
+        这里在编译命名空间中注入 ``_super`` 代理，指向实例上绑定前的原始方法，
+        用户代码中应使用 ``_super.method_name(...)`` 代替 ``super().method_name(...)``。
+        同时也会将 ``super`` 本身替换为一个兼容的代理函数。
+        """
+        if not custom_methods:
+            return
+
+        from src.utils.template_parser import compile_custom_methods
+
+        # 在绑定前，先收集原始方法引用，供 super() 代理使用
+        original_methods: Dict[str, Any] = {}
+        for method_name in custom_methods:
+            orig = getattr(self, method_name, None)
+            if orig is not None:
+                original_methods[method_name] = orig
+
+        # 构建 super() 代理：调用 _super.method_name(...) 等价于 super().method_name(...)
+        class _SuperProxy:
+            def __getattr__(self, name: str):
+                if name in original_methods:
+                    return original_methods[name]
+                raise AttributeError(f"原始方法 {name!r} 不存在，无法通过 _super 调用")
+
+        try:
+            compiled = compile_custom_methods(custom_methods, extra_namespace={
+                "_super": _SuperProxy(),
+            })
+        except ValueError as e:
+            logger.error(f"自定义方法编译失败，已跳过: source={self.source_name}, error={e}")
+            return
+
+        import types
+        for method_name, func in compiled.items():
+            try:
+                if isinstance(func, staticmethod):
+                    # @staticmethod: 剥离装饰器，直接设为普通函数（不绑定 self）
+                    underlying = func.__func__
+                    setattr(self, method_name, underlying)
+                    logger.info(f"已绑定静态方法: source={self.source_name}, method={method_name}")
+                elif isinstance(func, classmethod):
+                    # @classmethod: 提取底层函数，绑定 cls 为实例的类
+                    underlying = func.__func__
+                    bound = types.MethodType(underlying, type(self))
+                    setattr(self, method_name, bound)
+                    logger.info(f"已绑定类方法: source={self.source_name}, method={method_name}")
+                else:
+                    # 普通方法: 绑定为实例方法
+                    bound = types.MethodType(func, self)
+                    setattr(self, method_name, bound)
+                    logger.info(f"已绑定自定义方法: source={self.source_name}, method={method_name}")
+            except Exception as e:
+                logger.error(f"绑定自定义方法失败: source={self.source_name}, method={method_name}, error={e}")
+
+    # ── 登录流程 ──────────────────────────────────────────────
+
+    def login_and_build_headers(self, home_url: str) -> Dict[str, str]:
+        """执行 Playwright 模拟登录并返回可用请求头。"""
+        if not self.login_enabled:
+            return {}
+
+        login_url = self.playwright_login_url or home_url
+        required_xpaths = [
+            self.playwright_login_username_xpath,
+            self.playwright_login_password_xpath,
+            self.playwright_login_submit_xpath,
+        ]
+        if not self.login_username or not self.login_password:
+            logger.warning(f"登录已启用但未提供账号密码: {home_url}")
+            return {}
+        if not all(required_xpaths):
+            logger.warning(f"登录已启用但缺少 Playwright 登录 XPath 配置: {home_url}")
+            return {}
+
+        result = playwright_login_and_get_headers_sync(
+            login_url=login_url,
+            username=self.login_username,
+            password=self.login_password,
+            username_xpath=self.playwright_login_username_xpath,
+            password_xpath=self.playwright_login_password_xpath,
+            submit_xpath=self.playwright_login_submit_xpath,
+            login_entry_xpath=self.playwright_login_entry_xpath or None,
+            success_wait_xpath=self.playwright_login_success_xpath or None,
+            timeout=self.playwright_login_timeout,
+            headless=self.playwright_headless,
+        )
+        if result.get("status"):
+            return result.get("headers", {})
+
+        logger.warning(f"Playwright 模拟登录未获取到可用请求头: {home_url}")
+        return {}
+
+    def get_login_headers(self, home_url: str) -> Dict[str, str]:
+        """获取登录请求头（带缓存）。"""
+        if not self.login_enabled:
+            return {}
+        if home_url in self._login_headers_cache:
+            return self._login_headers_cache[home_url]
+
+        headers = self.login_and_build_headers(home_url) or {}
+        if headers:
+            self._login_headers_cache[home_url] = headers
+            return headers
+
+        logger.warning(f"登录已启用但未获取到登录请求头: {home_url}")
+        return {}
+
+    # ── 正文图片占位 ─────────────────────────────────────────
+
+    @staticmethod
+    def _derive_root_xpath_from_content_xpath(content_xpath: str) -> str:
+        xpath = (content_xpath or "").strip()
+        if not xpath:
+            return ""
+        xpath = re.sub(r"//text\(\).*$", "", xpath)
+        xpath = re.sub(r"/text\(\).*$", "", xpath)
+        return xpath.strip()
+
+    def _serialize_content_with_images(self, detail_page, detail_url: str):
+        """序列化正文节点，按 DOM 顺序交替提取文本和图片占位符。"""
+        root_xpath_values = self.ensure_xpath_list(self.content_root_xpath)
+        if not root_xpath_values:
+            content_xpath_values = self.ensure_xpath_list(self.content_xpath)
+            for xpath in content_xpath_values:
+                derived = self._derive_root_xpath_from_content_xpath(xpath)
+                if derived:
+                    root_xpath_values.append(derived)
+
+        root_nodes = []
+        for xpath in root_xpath_values:
+            nodes = detail_page.xpath(xpath)
+            if nodes:
+                root_nodes = nodes
+                break
+
+        if not root_nodes:
+            return "", []
+
+        parts: List[str] = []
+        image_mappings: List[Dict[str, str]] = []
+        for root in root_nodes:
+            ordered_nodes = root.xpath(".//text() | .//img")
+            for node in ordered_nodes:
+                if hasattr(node, "tag"):
+                    if str(node.tag).lower() != "img":
+                        continue
+                    raw_src = (
+                        (node.get("src") or "").strip()
+                        or (node.get("data-src") or "").strip()
+                        or (node.get("data-original") or "").strip()
+                    )
+                    if not raw_src:
+                        continue
+                    normalized_src = self.normalize_url(raw_src)
+                    image_index = len(image_mappings) + 1
+                    placeholder = self.content_image_placeholder_template.format(index=image_index, url=normalized_src)
+                    image_mappings.append(
+                        {
+                            "placeholder": placeholder,
+                            "image_url": normalized_src,
+                        }
+                    )
+                    parts.append(placeholder)
+                    continue
+
+                parent = getattr(node, "getparent", lambda: None)()
+                if parent is not None and str(getattr(parent, "tag", "")).lower() in {"script", "style"}:
+                    continue
+                text = self.clean_text(str(node))
+                if text:
+                    parts.append(text)
+
+        content = self.join_cleaned_paragraphs(parts)
+        return content, image_mappings
+
+    def build_content_text(self, detail_page, detail_url: str) -> str:
+        """构建正文文本，启用图片占位时插入占位符与映射。"""
+        if not self.enable_content_image_placeholder:
+            detail_contents_list = self.extract_first_text_list(detail_page, self.content_xpath)
+            return self.join_cleaned_paragraphs(detail_contents_list)
+
+        detail_contents_raw, image_mappings = self._serialize_content_with_images(detail_page, detail_url)
+        if not detail_contents_raw:
+            detail_contents_list = self.extract_first_text_list(detail_page, self.content_xpath)
+            detail_contents_raw = self.join_cleaned_paragraphs(detail_contents_list)
+
+        if image_mappings and self.append_content_image_mapping:
+            mapping_lines = [f"{item['placeholder']} => {item['image_url']}" for item in image_mappings]
+            detail_contents_raw = f"{detail_contents_raw}\n\n图片映射:\n" + "\n".join(mapping_lines)
+        return detail_contents_raw
+
+    # ── 基础工具方法 ─────────────────────────────────────────
 
     @staticmethod
     def clean_text(text: str) -> str:
         if not text:
             return ""
-        cleaned = text.replace("\xa0", " ").replace("\u200b", " ").replace("\r", " ")
-        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = text.replace("\xa0", " ").replace("\u200b", "").replace("\r", "")
+        # 保留换行符，仅折叠空格和制表符
+        cleaned = re.sub(r"[^\S\n]+", " ", cleaned)
+        # 去除每行首尾空格，合并连续空行
+        lines = [line.strip() for line in cleaned.split("\n")]
+        cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
         return cleaned.strip()
+
+    @classmethod
+    def join_cleaned_paragraphs(cls, paragraphs: List[str]) -> str:
+        cleaned_paragraphs = [cls.clean_text(paragraph) for paragraph in paragraphs]
+        return "\n".join(paragraph for paragraph in cleaned_paragraphs if paragraph)
 
     @staticmethod
     def ensure_xpath_list(xpath_value: Union[XPathValue, tuple, None]) -> List[str]:
@@ -90,18 +321,55 @@ class ConfigurableXPathCrawler:
             return [xpath_value]
         return [item for item in xpath_value if item]
 
-    def normalize_url(self, url: str) -> str:
+    # ── XPath getter 方法（与基类 XPathCrawlerTaskBase 保持一致）──
+
+    def get_date_xpath(self, home_url: str) -> XPathValue:
+        return self.date_xpath
+
+    def get_home_date_xpath(self, home_url: str) -> XPathValue:
+        return self.home_date_xpath
+
+    def get_url_xpath(self, home_url: str) -> XPathValue:
+        return self.url_xpath
+
+    def get_title_xpath(self, home_url: str) -> XPathValue:
+        return self.title_xpath
+
+    def get_content_xpath(self, home_url: str) -> XPathValue:
+        return self.content_xpath
+
+    def get_content_root_xpath(self, home_url: str) -> XPathValue:
+        return self.content_root_xpath
+
+    def get_content_image_xpath(self, home_url: str) -> XPathValue:
+        return self.content_image_xpath
+
+    def get_image_xpath(self, home_url: str) -> XPathValue:
+        return self.image_xpath
+
+    def get_detail_image_xpath(self, home_url: str) -> XPathValue:
+        return self.detail_image_xpath
+
+    def get_home_wait_xpath(self, home_url: str) -> XPathValue:
+        return self.home_wait_xpath
+
+    def get_detail_wait_xpath(self, home_url: str) -> XPathValue:
+        return self.detail_wait_xpath
+
+    def normalize_url(self, url: str, base_url: Optional[str] = None) -> str:
         if not url:
             return ""
         if url.startswith(("http://", "https://")):
             return url
-        if not self.prefix:
+        # 优先使用 base_url，其次使用 self.prefix
+        prefix = base_url or self.prefix
+        if not prefix:
             return url
-        if self.prefix.endswith("/") and url.startswith("/"):
-            return f"{self.prefix[:-1]}{url}"
-        if not self.prefix.endswith("/") and not url.startswith("/"):
-            return f"{self.prefix}/{url}"
-        return f"{self.prefix}{url}"
+        if prefix.endswith("/") and url.startswith("/"):
+            return f"{prefix[:-1]}{url}"
+        if not prefix.endswith("/") and not url.startswith("/"):
+            return f"{prefix}/{url}"
+        return f"{prefix}{url}"
 
     @staticmethod
     def extract_url_from_node(node) -> str:
@@ -172,7 +440,7 @@ class ConfigurableXPathCrawler:
                 return source_name
         return ""
 
-    def get_source_language(self, detail_title: str, detail_contents: str) -> str:
+    def get_source_language(self, home_url: str, detail_title: str, detail_contents: str) -> str:
         configured_language = (self.source_language or "auto").strip().lower()
         if configured_language != "auto":
             return configured_language
@@ -192,16 +460,33 @@ class ConfigurableXPathCrawler:
         language_key = (language or "").strip().lower()
         return bool(language_key) and language_key not in {"auto", "en", "en-us", "en-gb"} and not language_key.startswith("zh")
 
-    def fetch_page(self, url: str, wait_xpath: Optional[XPathValue] = None) -> Optional[etree._Element]:
-        result = asyncio.run(playwright_fetch(url, wait_xpath=wait_xpath))
+    def fetch_page(
+        self,
+        url: str,
+        wait_xpath: Optional[XPathValue] = None,
+        request_headers: Optional[Dict[str, str]] = None,
+    ) -> Optional[etree._Element]:
+        result = asyncio.run(
+            playwright_fetch(
+                url,
+                wait_xpath=wait_xpath,
+                request_headers=request_headers,
+                headless=self.playwright_headless,
+            )
+        )
         if not result or not result.get("status") or not result.get("html"):
             return None
         return etree.HTML(result["html"])
 
     def fetch_home_page(self, home_url: str):
         attempts = self.list_retry_count + 1
+        login_headers = self.get_login_headers(home_url) if self.login_enabled else {}
         for attempt in range(attempts):
-            parsed_page = self.fetch_page(home_url, wait_xpath=self.home_wait_xpath)
+            parsed_page = self.fetch_page(
+                home_url,
+                wait_xpath=self.home_wait_xpath,
+                request_headers=login_headers or None,
+            )
             if parsed_page is not None:
                 return parsed_page
             if attempt < attempts - 1:
@@ -267,7 +552,7 @@ class ConfigurableXPathCrawler:
         image_nodes = self.extract_first_url_list(page, image_xpath)
         return image_nodes[0] if image_nodes else None
 
-    def resolve_image_url(self, detail_page, item: dict) -> str:
+    def resolve_image_url(self, home_url: str, detail_page, item: dict) -> str:
         list_image_url = item.get("img_url")
         if list_image_url:
             return list_image_url
@@ -276,7 +561,7 @@ class ConfigurableXPathCrawler:
             return detail_image_url
         return self.default_image_url
 
-    def extract_list_items(self, parsed_page) -> list:
+    def extract_list_items(self, home_url: str, parsed_page) -> list:
         raw_urls = self.extract_first_url_list(parsed_page, self.url_xpath)
         if self.dedupe_urls:
             raw_urls = list(dict.fromkeys(raw_urls))
@@ -338,8 +623,8 @@ class ConfigurableXPathCrawler:
             return items
         return [{"detail_url": detail_url, "img_url": None, "detail_date": None} for detail_url in detail_urls]
 
-    def build_language_fields(self, detail_title: str, detail_contents: str) -> Dict[str, str]:
-        source_language = self.get_source_language(detail_title, detail_contents)
+    def build_language_fields(self, home_url: str, detail_title: str, detail_contents: str) -> Dict[str, str]:
+        source_language = self.get_source_language(home_url, detail_title, detail_contents)
 
         if self.is_chinese_language(source_language):
             return {
@@ -404,11 +689,10 @@ class ConfigurableXPathCrawler:
                 logger.error(exc)
                 return None
 
-    def build_res_record(self, detail_page, item: dict) -> dict:
+    def build_res_record(self, home_url: str, detail_page, item: dict) -> dict:
         detail_url = item["detail_url"]
         detail_title_raw = self.extract_first_text(detail_page, self.title_xpath, "标题")
-        detail_contents_list = self.extract_first_text_list(detail_page, self.content_xpath)
-        detail_contents_raw = self.clean_text(self.content_joiner.join(detail_contents_list))
+        detail_contents_raw = self.build_content_text(detail_page, detail_url)
         date_text = item.get("detail_date") or self.extract_first_text(detail_page, self.date_xpath, "日期")
         date_str, datetime_str = self.convert_date_format(date_text)
 
@@ -416,9 +700,9 @@ class ConfigurableXPathCrawler:
             "detail_url": detail_url,
             "detail_date": date_str,
             "detail_timestamptz": datetime_str,
-            "img_parse_url": self.resolve_image_url(detail_page, item),
+            "img_parse_url": self.resolve_image_url(home_url, detail_page, item),
         }
-        result.update(self.build_language_fields(detail_title_raw, detail_contents_raw))
+        result.update(self.build_language_fields(home_url, detail_title_raw, detail_contents_raw))
         detail_title = result.get("detail_title") or ""
         detail_contents = result.get("detail_contents") or ""
         detail_title_cn = result.get("detail_title_cn") or ""
@@ -448,15 +732,20 @@ class ConfigurableXPathCrawler:
             result["detail_contents"] = detail_contents_raw
         return result
 
-    def process_detail_item(self, item: Dict[str, Optional[str]]) -> Optional[dict]:
+    def process_detail_item(self, home_url: str, item: Dict[str, Optional[str]]) -> Optional[dict]:
         detail_url = item["detail_url"]
         attempts = self.detail_retry_count + 1
+        login_headers = self.get_login_headers(home_url) if self.login_enabled else {}
         for attempt in range(attempts):
             try:
-                detail_page = self.fetch_page(detail_url, wait_xpath=self.detail_wait_xpath)
+                detail_page = self.fetch_page(
+                    detail_url,
+                    wait_xpath=self.detail_wait_xpath,
+                    request_headers=login_headers or None,
+                )
                 if detail_page is None:
                     raise ValueError("详情页解析失败")
-                result = self.build_res_record(detail_page, item)
+                result = self.build_res_record(home_url, detail_page, item)
                 logger.info(
                     f"crawler详情页处理成功: source={self.source_name}, detail_url={detail_url}, attempt={attempt + 1}, article_id={result.get('article_id')}"
                 )
@@ -488,13 +777,13 @@ class ConfigurableXPathCrawler:
                 logger.error(f"主页解析失败: {home_url}")
                 home_page_failed_count += 1
                 continue
-            items = self.extract_list_items(parsed_page)
+            items = self.extract_list_items(home_url, parsed_page)
             list_item_total += len(items)
             logger.info(
                 f"crawler首页处理: source={self.source_name}, home_url={home_url}, list_item_count={len(items)}"
             )
             for item in items:
-                result = self.process_detail_item(item)
+                result = self.process_detail_item(home_url, item)
                 if not result:
                     detail_failed_count += 1
                     continue

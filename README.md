@@ -11,7 +11,9 @@ Celery Crawl Hub 是一个基于 FastAPI、Celery、Redis、PostgreSQL 和 Playw
 - **浏览器采集能力**：集成 Playwright，支持动态页面。
 - **XPath 实时验证**：支持在创建任务时一键测试 XPath 提取结果，降低配置调试成本。
 - **Python 模板编辑器**：在创建任务时可通过内置 Python 代码编辑器编写爬虫类定义，自动解析属性并映射到表单配置，无需手动逐项填写。
-- **容器化部署**：一键启动 API、Worker、Beat、Redis、Postgres 和 Web Nginx 控制台。
+- **Playwright 登录态支持**：可配置账号密码 + XPath 自动模拟登录，登录态 Cookie 自动注入后续请求。
+- **正文图片占位**：支持按 DOM 顺序将正文中的 `<img>` 替换为 Markdown 图片占位符，并可选追加图片映射表。
+- **容器化部署**：一键启动 API、Worker、Beat、Redis、Postgres 和 Web Nginx 控制台，数据库迁移自动执行。
 
 ## 技术栈
 
@@ -288,3 +290,22 @@ class MyCrawlerTask(XPathCrawlerTaskBase):
 ## License
 
 开源前请补充许可证文件，例如 MIT、Apache-2.0 或其他适合项目的许可证。
+
+## 更新日志
+
+### 2026-06-15 - 登录态与正文图片占位功能
+
+**新增功能：**
+- **Playwright 登录态支持**：新增 16 个配置字段，支持通过 Playwright 自动模拟登录流程，登录态 Cookie 自动注入到后续列表页和详情页请求
+  - 配置项包括：登录开关、账号密码、登录页 URL、各步骤 XPath（入口、用户名、密码、提交按钮、成功标识）、超时时间、无头模式
+  - 登录态按首页 URL 缓存，避免重复登录
+- **正文图片占位**：支持按 DOM 顺序将正文中的 `<img>` 标签替换为 Markdown 图片占位符
+  - 可配置正文根节点 XPath、图片 XPath、占位符模板
+  - 可选追加图片映射表（占位符 => 实际 URL）
+- **数据库自动迁移**：Docker Compose 新增 `db-migrate` 服务，每次启动自动执行 SQL 迁移脚本
+
+**修复与优化：**
+- 修复自定义方法中 `@staticmethod` 装饰器导致的参数绑定错误
+- 修复 `normalize_url` 方法签名与基类不一致问题
+- 修复正文内容换行丢失问题，改为逐段清洗后用 `\n` 合并
+- 新增 XPath getter 方法（`get_title_xpath`、`get_content_xpath` 等），与基类保持一致

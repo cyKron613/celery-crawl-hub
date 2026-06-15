@@ -15,6 +15,9 @@ from src.main.schema.crawler_task import (
     CrawlerTaskRunResponseVo,
     CrawlerTaskScheduleActionResponseVo,
     CrawlerTaskUpdateRequest,
+    CrawlerTemplateParseRequest,
+    CrawlerTemplateParseResponseVo,
+    CrawlerTemplateParseResult,
     CrawlerXPathTestRequest,
     CrawlerXPathTestResponseVo,
     CrawlerXPathTestResult,
@@ -420,3 +423,47 @@ async def test_xpath(
         message="提取成功",
         data=CrawlerXPathTestResult(extracted=extracted)
     )
+
+
+@router.post(
+    path="/parse-template",
+    summary="解析 Python 爬虫模板源码",
+    response_model=CrawlerTemplateParseResponseVo,
+)
+async def parse_crawler_template(
+    payload: CrawlerTemplateParseRequest = Body(..., description="Python 模板源码"),
+) -> CrawlerTemplateParseResponseVo:
+    from src.utils.template_parser import parse_python_template
+
+    source = payload.source.strip()
+    if not source:
+        return CrawlerTemplateParseResponseVo(
+            code=400,
+            message="模板源码不能为空",
+            data=None,
+        )
+
+    try:
+        result = parse_python_template(source)
+        return CrawlerTemplateParseResponseVo(
+            code=200,
+            message="解析成功",
+            data=CrawlerTemplateParseResult(
+                class_name=result["class_name"],
+                attributes=result["attributes"],
+                custom_methods=result["custom_methods"],
+                all_method_names=result["all_method_names"],
+            ),
+        )
+    except ValueError as e:
+        return CrawlerTemplateParseResponseVo(
+            code=400,
+            message=f"模板解析失败: {e}",
+            data=None,
+        )
+    except Exception as e:
+        return CrawlerTemplateParseResponseVo(
+            code=500,
+            message=f"模板解析异常: {e}",
+            data=None,
+        )

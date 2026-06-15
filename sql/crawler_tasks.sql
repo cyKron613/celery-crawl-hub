@@ -68,6 +68,57 @@ ADD COLUMN IF NOT EXISTS min_content_length INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE sdc_test.crawler_tasks
 ADD COLUMN IF NOT EXISTS max_content_length INTEGER NOT NULL DEFAULT 0;
 
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS custom_methods JSONB;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS login_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS login_username VARCHAR(200) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS login_password VARCHAR(200) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_url VARCHAR(500) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_entry_xpath VARCHAR(500) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_username_xpath VARCHAR(500) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_password_xpath VARCHAR(500) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_submit_xpath VARCHAR(500) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_success_xpath VARCHAR(500) NOT NULL DEFAULT '';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_login_timeout INTEGER NOT NULL DEFAULT 60;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS playwright_headless BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS enable_content_image_placeholder BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS content_root_xpath JSONB;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS content_image_xpath JSONB;
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS content_image_placeholder_template VARCHAR(200) NOT NULL DEFAULT '![图片{index}]({url})';
+
+ALTER TABLE sdc_test.crawler_tasks
+ADD COLUMN IF NOT EXISTS append_content_image_mapping BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE INDEX IF NOT EXISTS idx_crawler_tasks_schedule_enabled ON sdc_test.crawler_tasks(schedule_enabled, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_crawler_task_executions_task_id ON sdc_test.crawler_task_executions(task_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_crawler_task_executions_celery_task_id ON sdc_test.crawler_task_executions(celery_task_id);

@@ -101,7 +101,7 @@ class XPathCrawlerTaskBase:
     source_map: Dict[str, str] = {}
     category: str = ""
 
-    content_joiner: str = " "
+    content_joiner: str = "\n"
     default_image_url: str = (
         "https://ai-doc.data.myvessel.cn/news/%E8%88%AA%E8%BF%90%E5%BF%AB%E8%AE%AF%E5%A4%B4"
         "%E5%9B%BE.jpg?OSSAccessKeyId=LTAI5t7nfdMfD7YeTFpAENJ4&Expires=2725518616&"
@@ -180,11 +180,15 @@ class XPathCrawlerTaskBase:
 
     @staticmethod
     def clean_text(text: str) -> str:
-        """清洗文本中的多余空白和常见不可见字符。"""
+        """清洗文本中的多余空白和常见不可见字符，保留换行。"""
         if not text:
             return ""
-        cleaned = text.replace("\xa0", " ").replace("\u200b", " ").replace("\r", " ")
-        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = text.replace("\xa0", " ").replace("\u200b", "").replace("\r", "")
+        # 保留换行符，仅折叠空格和制表符
+        cleaned = re.sub(r"[^\S\n]+", " ", cleaned)
+        # 去除每行首尾空格，合并连续空行
+        lines = [line.strip() for line in cleaned.split("\n")]
+        cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
         return cleaned.strip()
 
     @staticmethod

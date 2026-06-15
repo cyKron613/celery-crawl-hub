@@ -44,6 +44,27 @@ services:
       timeout: 5s
       retries: 5
 
+  db-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - ../../sql/crawler_tasks.sql:/migrations/01-crawler-tasks.sql:ro
+      - ../../sql/ex_crawl_log.sql:/migrations/02-ex-crawl-log.sql:ro
+      - ../../sql/ex_shipping_information.sql:/migrations/03-ex-shipping-information.sql:ro
+    command: >
+      sh -c "
+        echo 'Running database migrations...' &&
+        psql -h postgres -U ${POSTGRES_USERNAME:-crawler} -d ${POSTGRES_DB:-crawler_studio} -f /migrations/01-crawler-tasks.sql &&
+        psql -h postgres -U ${POSTGRES_USERNAME:-crawler} -d ${POSTGRES_DB:-crawler_studio} -f /migrations/02-ex-crawl-log.sql &&
+        psql -h postgres -U ${POSTGRES_USERNAME:-crawler} -d ${POSTGRES_DB:-crawler_studio} -f /migrations/03-ex-shipping-information.sql &&
+        echo 'Migrations completed successfully.'
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   redis:
     image: redis:7-alpine
     ports:
@@ -71,6 +92,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   crawler-celery-worker:
@@ -97,6 +120,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   translate-schedule-worker:
@@ -123,6 +148,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   crawler-celery-beat:
@@ -135,6 +162,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   web:
