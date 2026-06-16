@@ -213,6 +213,68 @@ class MyCrawlerTask(XPathCrawlerTaskBase):
     detail_wait_xpath = "//h1[@class='title']"
 ```
 
+### AI 自动生成爬虫模板
+
+通过 `/crawl-request` 命令，AI 会自动分析目标网站结构并生成完整的爬虫配置：
+
+**使用方式：**
+
+在 VS Code Copilot Chat 中输入：
+
+```
+/crawl-request 采集 https://info.chineseshipping.com.cn/cninfo/News/ 生成模板和sql
+```
+
+**自动生成内容：**
+
+1. **SQL 插入语句** (`sql/{source_name}_news.sql`)
+   - 完整的 `crawler_tasks` 表 INSERT 语句
+   - 包含所有 XPath 配置、调度参数、重试策略
+   - 可直接执行导入数据库
+
+2. **Python 模板代码** (`sql/{source_name}_template.py`)
+   - 继承 `XPathCrawlerTaskBase` 的爬虫类定义
+   - 所有属性与 SQL 配置完全一致
+   - 如需自定义方法（如 Tab 切换、特殊日期处理），自动生成 `custom_methods`
+
+**工作流程：**
+
+```
+用户输入 /crawl-request + URL
+    ↓
+AI 分析页面结构（列表页 + 详情页）
+    ↓
+自动提取 XPath 选择器
+    ↓
+生成 SQL + Python 双模板
+    ↓
+验证字段一致性
+    ↓
+可直接投入使用
+```
+
+**示例输出：**
+
+```python
+# sql/chineseshipping_template.py
+class ChineseShippingCrawlerTask(XPathCrawlerTaskBase):
+    source_name = "chineseshipping"
+    prefix = "https://info.chineseshipping.com.cn/cninfo/News"
+    home_url_list = ["https://info.chineseshipping.com.cn/cninfo/News/"]
+    url_xpath = ['//ul/li/div[@class="newstextbt"]/a/@href']
+    title_xpath = ["//div[@class='newstextbt2015']/text()"]
+    content_xpath = ['//div[@class="TRS_Editor"]//p/text()']
+    date_xpath = ['//span[@id="fbsj"]/text()']
+    # ... 完整配置
+```
+
+**适用场景：**
+
+- 快速接入新的新闻来源网站
+- 批量生成多个爬虫模板
+- 减少手动配置 XPath 的工作量
+- 确保 SQL 和 Python 模板字段一致性
+
 ### XPath 实时测试
 
 在配置 XPath 规则时，可以使用内置的测试功能：
@@ -294,6 +356,17 @@ class MyCrawlerTask(XPathCrawlerTaskBase):
 开源前请补充许可证文件，例如 MIT、Apache-2.0 或其他适合项目的许可证。
 
 ## 更新日志
+
+### 2026-06-16 - AI 自动生成爬虫模板
+
+**新增功能：**
+- **`/crawl-request` 命令式入口**：在 VS Code Copilot Chat 中输入 `/crawl-request 采集 <URL> 生成模板和sql`，AI 自动分析目标网站并生成完整的爬虫配置
+  - 自动分析列表页和详情页 DOM 结构
+  - 自动提取 XPath 选择器（URL、标题、正文、日期、图片等）
+  - 同时生成 SQL 插入语句和 Python 模板代码（双产出物）
+  - 自动验证两份产出物的字段一致性
+  - 支持自定义方法覆盖（如 Tab 切换、特殊日期处理）
+- **Harness 工作流升级**：`.claude/skills/` 和 `.claude/agents/` 强制要求每个新爬虫必须同时生成 SQL 和 Python 模板
 
 ### 2026-06-16 - 实时日志流功能
 
