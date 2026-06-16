@@ -13,6 +13,7 @@ Celery Crawl Hub 是一个基于 FastAPI、Celery、Redis、PostgreSQL 和 Playw
 - **Python 模板编辑器**：在创建任务时可通过内置 Python 代码编辑器编写爬虫类定义，自动解析属性并映射到表单配置，无需手动逐项填写。
 - **Playwright 登录态支持**：可配置账号密码 + XPath 自动模拟登录，登录态 Cookie 自动注入后续请求。
 - **正文图片占位**：支持按 DOM 顺序将正文中的 `<img>` 替换为 Markdown 图片占位符，并可选追加图片映射表。
+- **实时日志流**：通过 WebSocket 实时推送 Celery Worker 执行日志，支持在前端管理看板中查看任务执行状态和详细日志。
 - **容器化部署**：一键启动 API、Worker、Beat、Redis、Postgres 和 Web Nginx 控制台，数据库迁移自动执行。
 
 ## 技术栈
@@ -45,9 +46,10 @@ Celery Crawl Hub 是一个基于 FastAPI、Celery、Redis、PostgreSQL 和 Playw
 | 路径 | 方法 | 描述 |
 | :--- | :--- | :--- |
 | `/api/v1/crawler/tasks` | GET/POST | 获取/创建爬虫任务 |
-| `/api/v1/crawler/test-xpath` | POST | **[NEW]** 实时测试 XPath 提取效果 |
+| `/api/v1/crawler/test-xpath` | POST | 实时测试 XPath 提取效果 |
 | `/api/v1/crawler/tasks/{id}/run` | POST | 立即手动触发任务执行 |
 | `/api/v1/crawler/inserted-data` | GET | 分页查看已采集并入库的正式数据 |
+| `/api/ws/logs` | WebSocket | **[NEW]** 实时日志流，推送 Worker 执行日志 |
 
 ## 快速开始
 
@@ -292,6 +294,21 @@ class MyCrawlerTask(XPathCrawlerTaskBase):
 开源前请补充许可证文件，例如 MIT、Apache-2.0 或其他适合项目的许可证。
 
 ## 更新日志
+
+### 2026-06-16 - 实时日志流功能
+
+**新增功能：**
+- **实时日志流**：通过 WebSocket 实时推送 Celery Worker 的执行日志到前端管理看板
+  - 使用 `docker logs --follow` 直接读取 Worker 容器日志，无需额外的消息队列中转
+  - 自动解析 loguru 格式日志，清理 ANSI 转义码和 Docker 时间戳前缀
+  - 支持日志级别颜色区分（ERROR/WARNING/INFO/DEBUG）
+  - 前端「实时日志」面板支持自动滚动和清空日志功能
+- **Docker 部署优化**：`crawler-api` 服务挂载 `/var/run/docker.sock`，基础镜像安装 `docker.io` CLI
+
+**技术改进：**
+- 简化日志架构：移除 Redis Pub/Sub 中转层，直接通过 Docker logs 流式读取
+- 优化 loguru 配置：移除 `colorize=True` 和 `enqueue=True`，避免 ANSI 转义码污染和 prefork 兼容性问题
+- 清理废弃代码：删除 `log_publisher.py` 及相关 Redis Pub/Sub 逻辑
 
 ### 2026-06-15 - 登录态与正文图片占位功能
 

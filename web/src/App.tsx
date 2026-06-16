@@ -14,8 +14,9 @@ import {
   testXPath,
 } from './api'
 import type { CrawlerTask, InsertedDataItem, TaskFormData } from './types'
+import { LogViewer } from './components/LogViewer'
 
-type Panel = 'tasks' | 'editor' | 'inserted'
+type Panel = 'tasks' | 'editor' | 'inserted' | 'logs'
 
 const emptyForm: TaskFormData = taskToForm()
 const createTemplateForm = (): TaskFormData => ({
@@ -289,6 +290,9 @@ function App() {
         <button className={panel === 'inserted' ? 'nav active' : 'nav'} onClick={() => setPanel('inserted')}>
           入库数据
         </button>
+        <button className={panel === 'logs' ? 'nav active' : 'nav'} onClick={() => setPanel('logs')}>
+          实时日志
+        </button>
         <button
           className="nav secondary"
           onClick={() => {
@@ -541,6 +545,23 @@ function App() {
                 下一页
               </button>
             </div>
+          </section>
+        )}
+
+        {panel === 'logs' && (
+          <section className="panel">
+            <header className="panel-head">
+              <h2>实时日志</h2>
+              <div className="actions">
+                <span style={{ fontSize: '13px', color: '#48688c', alignSelf: 'center' }}>
+                  {selectedTaskId ? `过滤任务: ${selectedTaskId.slice(0, 8)}` : '显示全部日志'}
+                </span>
+              </div>
+            </header>
+            <p className="status">
+              通过 WebSocket 实时接收 Celery Worker 日志。选择任务后可过滤特定任务日志。
+            </p>
+            <LogViewer taskId={selectedTaskId || undefined} maxHeight="calc(100vh - 280px)" />
           </section>
         )}
       </main>

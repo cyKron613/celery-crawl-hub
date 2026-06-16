@@ -331,6 +331,7 @@ def _task_to_runtime_config(task: CrawlerTask) -> dict:
 
 
 async def _execute_crawler_task(task_id: str, trigger_type: str, celery_task_id: str | None) -> dict:
+    logger.info(f"🚀 开始执行爬虫任务: {task_id} (触发类型: {trigger_type})")
     session_factory, engine = _create_session_factory()
     try:
         async with session_factory() as session:

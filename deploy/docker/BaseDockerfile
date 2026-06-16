@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     gnupg \
     vim \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制并安装Python依赖

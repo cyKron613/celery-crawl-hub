@@ -6,10 +6,11 @@ export default defineConfig({
         host: true,
         port: 5173,
         proxy: {
-            // 开发时透传 /api 到本地后端
+            // 开发时透传 /api 到本地后端（含 WebSocket）
             '/api': {
                 target: 'http://127.0.0.1:8000',
                 changeOrigin: true,
+                ws: true,
             },
         },
     },

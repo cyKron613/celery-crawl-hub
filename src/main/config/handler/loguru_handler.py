@@ -25,13 +25,12 @@ def configure_loguru_for_worker() -> None:
     logger.add(
         sys.stdout,
         level="INFO",
-        enqueue=True,
         backtrace=True,
         diagnose=False,
-        colorize=True,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{process.name}</cyan>:<cyan>{thread.name}</cyan> | <level>{message}</level>",
+        colorize=False,
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {process.name}:{thread.name} | {message}",
     )
-
+    
     intercept_handler = InterceptHandler()
     logging.basicConfig(handlers=[intercept_handler], level=logging.INFO, force=True)
 
